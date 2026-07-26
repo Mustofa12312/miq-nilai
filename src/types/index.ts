@@ -14,3 +14,5 @@ export interface AuthState {
   profile: Profile | null;
   loading: boolean;
 }
+
+export * from './database';

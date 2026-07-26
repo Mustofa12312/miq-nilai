@@ -1,19 +1,46 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
   const navigate = useNavigate();
+  const { user, profile } = useAuth();
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user && profile) {
+      if (['super_admin', 'admin'].includes(profile.role)) {
+        navigate('/admin', { replace: true });
+      } else if (profile.role === 'examiner') {
+        navigate('/examiner', { replace: true });
+      }
+    }
+  }, [user, profile, navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement Supabase Auth
-    // For now, simple mock routing based on email
-    if (email.includes('admin')) {
-      navigate('/admin');
-    } else {
-      navigate('/examiner');
+    setError('');
+    setIsLoading(true);
+
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        throw signInError;
+      }
+      // Success - AuthContext will detect the session change and trigger the useEffect above
+    } catch (err: any) {
+      setError(err.message || 'Gagal masuk. Periksa kembali email dan password Anda.');
+      setIsLoading(false);
     }
   };
 
@@ -23,6 +50,12 @@ export default function Login() {
         <h1 className="text-2xl font-bold text-gray-900 mb-2">MIQ Smart Assessment</h1>
         <p className="text-gray-500">Silakan login untuk melanjutkan</p>
       </div>
+
+      {error && (
+        <div className="mb-6 p-3 bg-red-50 text-error text-sm rounded-lg border border-red-100">
+          {error}
+        </div>
+      )}
 
       <form onSubmit={handleLogin} className="space-y-6">
         <div>
@@ -34,6 +67,7 @@ export default function Login() {
             placeholder="admin@miq.com atau penguji@miq.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={isLoading}
           />
         </div>
 
@@ -46,14 +80,20 @@ export default function Login() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={isLoading}
           />
         </div>
 
         <button
           type="submit"
-          className="w-full bg-primary hover:bg-emerald-600 text-white font-medium py-2.5 rounded-lg transition-colors"
+          disabled={isLoading}
+          className="w-full bg-primary hover:bg-emerald-600 text-white font-medium py-2.5 rounded-lg transition-colors flex justify-center items-center gap-2"
         >
-          Masuk
+          {isLoading ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            'Masuk'
+          )}
         </button>
       </form>
     </div>

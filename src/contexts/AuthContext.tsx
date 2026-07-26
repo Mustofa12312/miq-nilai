@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { AuthState, Profile } from '../types';
+import type { AuthState, Profile } from '../types';
 
 interface AuthContextType extends AuthState {
   signOut: () => Promise<void>;

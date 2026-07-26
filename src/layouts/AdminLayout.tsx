@@ -1,7 +1,10 @@
 import { Outlet, Link } from 'react-router-dom';
 import { LayoutDashboard, Users, BookOpen, Settings, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function AdminLayout() {
+  const { signOut } = useAuth();
+
   return (
     <div className="flex h-screen w-full bg-gray-50 text-left">
       {/* Sidebar Desktop */}
@@ -28,7 +31,10 @@ export default function AdminLayout() {
           </Link>
         </nav>
         <div className="p-4 border-t border-gray-200">
-          <button className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-error hover:bg-red-50 font-medium">
+          <button 
+            onClick={() => signOut()}
+            className="flex w-full items-center gap-3 px-3 py-2 rounded-lg text-error hover:bg-red-50 font-medium transition-colors"
+          >
             <LogOut size={20} />
             Logout
           </button>
@@ -40,6 +46,9 @@ export default function AdminLayout() {
         {/* Mobile Header (Hidden on Desktop) */}
         <header className="md:hidden bg-white border-b border-gray-200 p-4 flex items-center justify-between">
           <h1 className="text-lg font-bold text-primary">MIQ Admin</h1>
+          <button onClick={() => signOut()} className="text-error p-2">
+            <LogOut size={20} />
+          </button>
         </header>
 
         <div className="flex-1 overflow-auto p-4 md:p-8">

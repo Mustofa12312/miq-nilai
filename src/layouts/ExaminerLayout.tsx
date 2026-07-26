@@ -1,13 +1,19 @@
 import { Outlet, Link } from 'react-router-dom';
 import { Home, UserCircle, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ExaminerLayout() {
+  const { signOut } = useAuth();
+
   return (
     <div className="flex flex-col h-[100dvh] w-full max-w-md mx-auto bg-gray-50 text-left relative shadow-xl overflow-hidden border-x border-gray-200">
       {/* Header */}
       <header className="bg-primary text-white p-4 shadow-sm z-10 flex items-center justify-between">
         <h1 className="text-lg font-bold tracking-tight">Penilaian MIQ</h1>
-        <button className="p-1 rounded hover:bg-white/10 transition-colors">
+        <button 
+          onClick={() => signOut()}
+          className="p-1 rounded hover:bg-white/10 transition-colors"
+        >
           <LogOut size={20} />
         </button>
       </header>
