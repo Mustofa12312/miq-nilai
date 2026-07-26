@@ -14,6 +14,11 @@ import ExaminerDashboard from './features/dashboard/ExaminerDashboard';
 import StudentList from './features/classes/StudentList';
 import ScoringForm from './features/scores/ScoringForm';
 
+// Admin Master Data Pages
+import StudentManagement from './features/students/StudentManagement';
+import ClassManagement from './features/classes/ClassManagement';
+import ExamManagement from './features/exams/ExamManagement';
+
 function App() {
   return (
     <AuthProvider>
@@ -31,8 +36,9 @@ function App() {
           <Route element={<ProtectedRoute allowedRoles={['super_admin', 'admin']} />}>
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminDashboard />} />
-              <Route path="students" element={<div className="p-4">Menu Santri</div>} />
-              <Route path="exams" element={<div className="p-4">Menu Ujian</div>} />
+              <Route path="students" element={<StudentManagement />} />
+              <Route path="classes" element={<ClassManagement />} />
+              <Route path="exams" element={<ExamManagement />} />
               <Route path="settings" element={<div className="p-4">Menu Pengaturan</div>} />
             </Route>
           </Route>

@@ -13,7 +13,7 @@ export default function AdminLayout() {
           <h1 className="text-xl font-bold text-primary tracking-tight">MIQ Admin</h1>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          <Link to="/admin" className="flex items-center gap-3 px-3 py-2 rounded-lg bg-accent-bg text-accent font-medium">
+          <Link to="/admin" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">
             <LayoutDashboard size={20} />
             Dashboard
           </Link>
@@ -21,13 +21,13 @@ export default function AdminLayout() {
             <Users size={20} />
             Santri
           </Link>
-          <Link to="/admin/exams" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">
+          <Link to="/admin/classes" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">
             <BookOpen size={20} />
-            Ujian
+            Kelas & Tingkat
           </Link>
-          <Link to="/admin/settings" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">
+          <Link to="/admin/exams" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-gray-100 font-medium">
             <Settings size={20} />
-            Pengaturan
+            Ujian
           </Link>
         </nav>
         <div className="p-4 border-t border-gray-200">

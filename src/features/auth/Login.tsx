@@ -96,6 +96,26 @@ export default function Login() {
           )}
         </button>
       </form>
+      
+      {!import.meta.env.VITE_SUPABASE_URL && (
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <p className="text-xs text-gray-500 mb-3 text-center">MODE TESTING (Supabase belum di-setup)</p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => navigate('/admin')}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-lg transition-colors"
+            >
+              Coba UI Admin
+            </button>
+            <button
+              onClick={() => navigate('/examiner')}
+              className="flex-1 bg-accent-bg hover:bg-accent/20 text-accent text-sm font-medium py-2 rounded-lg transition-colors"
+            >
+              Coba UI Penguji
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
