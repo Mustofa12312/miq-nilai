@@ -16,46 +16,63 @@ export default function ReportManagement() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('scores')
-          .select(`
-            id,
-            total_score,
-            grade,
-            created_at,
-            student:students (
-              full_name,
-              class:classes (
-                name,
-                level:levels (name)
-              )
-            ),
-            session:score_sessions (
-              period:exam_periods (name),
-              examiner:profiles (full_name)
-            )
-          `)
-          .order('created_at', { ascending: false });
+  const [selectedClass, setSelectedClass] = useState('Semua Kelas');
+  const [selectedLevel, setSelectedLevel] = useState('Semua Tingkatan');
 
-        if (error) throw error;
-        if (data) setReports(data as any);
+  const [classes, setClasses] = useState<{name: string}[]>([]);
+  const [levels, setLevels] = useState<{name: string}[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [reportsRes, classesRes, levelsRes] = await Promise.all([
+          supabase
+            .from('scores')
+            .select(`
+              id,
+              total_score,
+              grade,
+              created_at,
+              student:students (
+                full_name,
+                class:classes (
+                  name,
+                  level:levels (name)
+                )
+              ),
+              session:score_sessions (
+                period:exam_periods (name),
+                examiner:profiles (full_name)
+              )
+            `)
+            .order('created_at', { ascending: false }),
+          supabase.from('classes').select('name').order('name'),
+          supabase.from('levels').select('name').order('sort_order')
+        ]);
+
+        if (reportsRes.error) throw reportsRes.error;
+        if (reportsRes.data) setReports(reportsRes.data as any);
+        if (classesRes.data) setClasses(classesRes.data);
+        if (levelsRes.data) setLevels(levelsRes.data);
       } catch (err) {
-        console.error('Error fetching reports:', err);
+        console.error('Error fetching data:', err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchReports();
+    fetchData();
   }, []);
 
-  const filteredReports = reports.filter(r => 
-    r.student?.full_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    r.student?.class?.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const uniqueClasses = classes.map(c => c.name);
+  const uniqueLevels = levels.map(l => l.name);
+
+  const filteredReports = reports.filter(r => {
+    const matchSearch = r.student?.full_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchClass = selectedClass === 'Semua Kelas' || r.student?.class?.name === selectedClass;
+    const matchLevel = selectedLevel === 'Semua Tingkatan' || r.student?.class?.level?.name === selectedLevel;
+    return matchSearch && matchClass && matchLevel;
+  });
 
   return (
     <div className="space-y-6">
@@ -73,17 +90,41 @@ export default function ReportManagement() {
         </div>
       </div>
 
-      {/* Toolbar / Search */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-4">
+      {/* Toolbar / Search & Filters */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="Cari nama santri atau kelas..."
+            placeholder="Cari nama santri..."
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
+        </div>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          <select 
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-gray-700 min-w-[160px]"
+            value={selectedLevel}
+            onChange={(e) => setSelectedLevel(e.target.value)}
+          >
+            <option value="Semua Tingkatan">Semua Tingkatan</option>
+            {uniqueLevels.map(level => (
+              <option key={level} value={level}>{level}</option>
+            ))}
+          </select>
+          
+          <select 
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-gray-700 min-w-[140px]"
+            value={selectedClass}
+            onChange={(e) => setSelectedClass(e.target.value)}
+          >
+            <option value="Semua Kelas">Semua Kelas</option>
+            {uniqueClasses.map(cls => (
+              <option key={cls} value={cls}>{cls}</option>
+            ))}
+          </select>
         </div>
       </div>
 

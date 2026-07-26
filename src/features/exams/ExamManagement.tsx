@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Settings, X, Loader2, Save } from 'lucide-react';
+import { Plus, Settings, X, Loader2, Save, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { ExamPeriod } from '../../types';
 
@@ -22,6 +22,10 @@ export default function ExamManagement() {
   const [showPeriodModal, setShowPeriodModal] = useState(false);
   const [showCriteriaModal, setShowCriteriaModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Edit state
+  const [editPeriodId, setEditPeriodId] = useState<number | null>(null);
+  const [editCriteriaId, setEditCriteriaId] = useState<number | null>(null);
 
   // Form state
   const [periodForm, setPeriodForm] = useState({ name: '', start_date: '', end_date: '', active: true });
@@ -48,11 +52,39 @@ export default function ExamManagement() {
     fetchData();
   }, []);
 
+  // --- PERIOD HANDLERS ---
+  const handleOpenAddPeriod = () => {
+    setEditPeriodId(null);
+    setPeriodForm({ name: '', start_date: '', end_date: '', active: true });
+    setShowPeriodModal(true);
+  };
+
+  const handleOpenEditPeriod = (p: ExamPeriod) => {
+    setEditPeriodId(p.id);
+    setPeriodForm({ name: p.name, start_date: p.start_date, end_date: p.end_date, active: p.active });
+    setShowPeriodModal(true);
+  };
+
+  const handleDeletePeriod = async (id: number) => {
+    if (!window.confirm('Yakin ingin menghapus periode ini?')) return;
+    try {
+      await supabase.from('exam_periods').delete().eq('id', id);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      alert('Gagal menghapus periode. Mungkin ada data nilai yang terikat.');
+    }
+  };
+
   const handleSavePeriod = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await supabase.from('exam_periods').insert([periodForm]);
+      if (editPeriodId) {
+        await supabase.from('exam_periods').update(periodForm).eq('id', editPeriodId);
+      } else {
+        await supabase.from('exam_periods').insert([periodForm]);
+      }
       setShowPeriodModal(false);
       fetchData();
     } catch (error) {
@@ -62,11 +94,39 @@ export default function ExamManagement() {
     }
   };
 
+  // --- CRITERIA HANDLERS ---
+  const handleOpenAddCriteria = () => {
+    setEditCriteriaId(null);
+    setCriteriaForm({ category: 'TAJWID', name: '', default_score: 100, deduction: 1, sort_order: 1 });
+    setShowCriteriaModal(true);
+  };
+
+  const handleOpenEditCriteria = (c: Criteria) => {
+    setEditCriteriaId(c.id);
+    setCriteriaForm({ category: c.category, name: c.name, default_score: c.default_score, deduction: c.deduction, sort_order: c.sort_order });
+    setShowCriteriaModal(true);
+  };
+
+  const handleDeleteCriteria = async (id: number) => {
+    if (!window.confirm('Yakin ingin menghapus kriteria ini?')) return;
+    try {
+      await supabase.from('criteria').delete().eq('id', id);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      alert('Gagal menghapus kriteria. Mungkin ada data nilai yang terikat.');
+    }
+  };
+
   const handleSaveCriteria = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
-      await supabase.from('criteria').insert([criteriaForm]);
+      if (editCriteriaId) {
+        await supabase.from('criteria').update(criteriaForm).eq('id', editCriteriaId);
+      } else {
+        await supabase.from('criteria').insert([criteriaForm]);
+      }
       setShowCriteriaModal(false);
       fetchData();
     } catch (error) {
@@ -103,7 +163,7 @@ export default function ExamManagement() {
           <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
             <h3 className="font-bold text-gray-900">Periode Ujian</h3>
             <button 
-              onClick={() => setShowPeriodModal(true)}
+              onClick={handleOpenAddPeriod}
               className="flex items-center gap-1 text-primary hover:text-emerald-700 text-sm font-medium"
             >
               <Plus size={16} /> Tambah
@@ -111,14 +171,24 @@ export default function ExamManagement() {
           </div>
           <ul className="divide-y divide-gray-100">
             {periods.map(period => (
-              <li key={period.id} className="p-4 hover:bg-gray-50 flex justify-between items-center">
+              <li key={period.id} className="p-4 hover:bg-gray-50 flex justify-between items-center group">
                 <div>
                   <p className="font-medium text-gray-900">{period.name}</p>
                   <p className="text-xs text-gray-500">{period.start_date} s/d {period.end_date}</p>
                 </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${period.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                  {period.active ? 'Aktif' : 'Selesai'}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${period.active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                    {period.active ? 'Aktif' : 'Selesai'}
+                  </span>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => handleOpenEditPeriod(period)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md">
+                      <Edit2 size={16} />
+                    </button>
+                    <button onClick={() => handleDeletePeriod(period.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-md">
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
               </li>
             ))}
             {periods.length === 0 && (
@@ -142,9 +212,19 @@ export default function ExamManagement() {
                   <h4 className="text-sm font-bold text-gray-500 mb-2 uppercase">{category}</h4>
                   <div className="space-y-2">
                     {groupedCriteria[category].map(item => (
-                      <div key={item.id} className="flex justify-between items-center p-3 border border-gray-100 rounded-lg">
+                      <div key={item.id} className="flex justify-between items-center p-3 border border-gray-100 rounded-lg group">
                         <span className="font-medium text-gray-700">{item.name}</span>
-                        <span className="text-sm text-gray-500">Maks: {item.default_score} (Potong -{item.deduction})</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-gray-500">Maks: {item.default_score} (Potong -{item.deduction})</span>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleOpenEditCriteria(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md">
+                              <Edit2 size={16} />
+                            </button>
+                            <button onClick={() => handleDeleteCriteria(item.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-md">
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -155,7 +235,7 @@ export default function ExamManagement() {
               )}
             </div>
             <button 
-              onClick={() => setShowCriteriaModal(true)}
+              onClick={handleOpenAddCriteria}
               className="mt-4 w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 font-medium hover:border-primary hover:text-primary transition-colors"
             >
               + Tambah Kriteria Baru
@@ -164,12 +244,12 @@ export default function ExamManagement() {
         </div>
       </div>
 
-      {/* Modal Tambah Periode */}
+      {/* Modal Tambah/Edit Periode */}
       {showPeriodModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={handleSavePeriod} className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-bold text-lg">Tambah Periode Ujian</h3>
+              <h3 className="font-bold text-lg">{editPeriodId ? 'Edit' : 'Tambah'} Periode Ujian</h3>
               <button type="button" onClick={() => setShowPeriodModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
             </div>
             <div className="p-4 space-y-4">
@@ -205,12 +285,12 @@ export default function ExamManagement() {
         </div>
       )}
 
-      {/* Modal Tambah Kriteria */}
+      {/* Modal Tambah/Edit Kriteria */}
       {showCriteriaModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <form onSubmit={handleSaveCriteria} className="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-              <h3 className="font-bold text-lg">Tambah Kriteria Penilaian</h3>
+              <h3 className="font-bold text-lg">{editCriteriaId ? 'Edit' : 'Tambah'} Kriteria Penilaian</h3>
               <button type="button" onClick={() => setShowCriteriaModal(false)} className="text-gray-400 hover:text-gray-600"><X size={20}/></button>
             </div>
             <div className="p-4 space-y-4">

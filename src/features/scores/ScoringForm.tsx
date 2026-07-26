@@ -61,8 +61,14 @@ export default function ScoringForm() {
     
     try {
       // 1. Get active period
-      const { data: period } = await supabase.from('exam_periods').select('id').eq('active', true).single();
-      if (!period) throw new Error("No active exam period");
+      let { data: period } = await supabase.from('exam_periods').select('id').eq('active', true).maybeSingle();
+      
+      // Fallback: If no active period, just get the most recent one
+      if (!period) {
+        const { data: latestPeriod } = await supabase.from('exam_periods').select('id').order('start_date', { ascending: false }).limit(1).maybeSingle();
+        if (!latestPeriod) throw new Error("Tidak ada data periode ujian di database. Harap buat periode ujian di menu Admin.");
+        period = latestPeriod;
+      }
 
       // 2. We should ideally select exam_type_id, but we'll hardcode 1 (Ujian Al-Quran) for MVP
       const examTypeId = 1;
