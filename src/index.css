@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #10b981; /* Emerald 500 - Hijau Islami */
+  --color-secondary: #ffffff; /* Putih */
+  --color-accent: #3b82f6; /* Blue 500 */
+  --color-error: #ef4444; /* Red 500 */
+  --color-warning: #eab308; /* Yellow 500 */
+  --font-sans: "Inter", "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+body {
+  @apply bg-gray-50 text-gray-900 antialiased;
+}
