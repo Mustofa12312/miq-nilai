@@ -18,6 +18,8 @@ import ScoringForm from './features/scores/ScoringForm';
 import StudentManagement from './features/students/StudentManagement';
 import ClassManagement from './features/classes/ClassManagement';
 import ExamManagement from './features/exams/ExamManagement';
+import ReportManagement from './features/reports/ReportManagement';
+import UserManagement from './features/users/UserManagement';
 
 function App() {
   return (
@@ -39,6 +41,8 @@ function App() {
               <Route path="students" element={<StudentManagement />} />
               <Route path="classes" element={<ClassManagement />} />
               <Route path="exams" element={<ExamManagement />} />
+              <Route path="reports" element={<ReportManagement />} />
+              <Route path="users" element={<UserManagement />} />
               <Route path="settings" element={<div className="p-4">Menu Pengaturan</div>} />
             </Route>
           </Route>

@@ -1,21 +1,158 @@
-import { useState } from 'react';
-import { Search, Plus, Upload, MoreHorizontal } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Search, Plus, Upload, MoreHorizontal, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown } from 'lucide-react';
+import * as XLSX from 'xlsx';
+import { supabase } from '../../lib/supabase';
+import type { Student, Class, Level } from '../../types';
 
-// MOCK DATA
-const MOCK_STUDENTS = [
-  { id: 1, name: 'Ahmad Fulan', className: 'A1', level: "Al-Qur'an I", status: 'Aktif' },
-  { id: 2, name: 'Budi Santoso', className: 'A1', level: "Al-Qur'an I", status: 'Aktif' },
-  { id: 3, name: 'Mustofa Kamal', className: 'B1', level: "Al-Qur'an II", status: 'Aktif' },
-  { id: 4, name: 'Fatimah Az-Zahra', className: 'C1', level: "Al-Qur'an III", status: 'Aktif' },
-];
+interface StudentData extends Student {
+  class?: Class & { level?: Level };
+}
+
+interface ImportRow {
+  full_name: string;
+  class_name?: string;
+  status?: string; // 'valid' | 'error'
+  error?: string;
+  class_id?: number;
+}
 
 export default function StudentManagement() {
   const [searchTerm, setSearchTerm] = useState('');
+  const [students, setStudents] = useState<StudentData[]>([]);
+  const [classes, setClasses] = useState<Class[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importDone, setImportDone] = useState(false);
+  const [importError, setImportError] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const filteredStudents = MOCK_STUDENTS.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.className.toLowerCase().includes(searchTerm.toLowerCase())
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [studentsRes, classesRes] = await Promise.all([
+        supabase.from('students').select('*, class:classes(name, level:levels(name))').order('full_name'),
+        supabase.from('classes').select('*'),
+      ]);
+      if (studentsRes.data) setStudents(studentsRes.data as any);
+      if (classesRes.data) setClasses(classesRes.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  // -- IMPORT LOGIC --
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    setImportError('');
+    setImportDone(false);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target!.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+        
+        if (rows.length === 0) {
+          setImportError('File kosong atau format tidak sesuai.');
+          return;
+        }
+
+        // Validate each row
+        const parsed: ImportRow[] = rows.map((row) => {
+          const name = row['Nama'] || row['nama'] || row['full_name'] || '';
+          const className = row['Kelas'] || row['kelas'] || row['class_name'] || '';
+          
+          if (!name.trim()) return { full_name: name, class_name: className, status: 'error', error: 'Nama kosong' };
+          
+          // Find matching class_id
+          const foundClass = classes.find(c => c.name.toLowerCase() === className.toLowerCase());
+          if (!foundClass) return { full_name: name, class_name: className, status: 'error', error: `Kelas "${className}" tidak ditemukan` };
+          
+          return { full_name: name.trim(), class_name: className, class_id: foundClass.id, status: 'valid' };
+        });
+
+        setImportRows(parsed);
+        setShowImportModal(true);
+      } catch (err) {
+        setImportError('Gagal membaca file. Pastikan format Excel (.xlsx) atau CSV.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
+
+  const handleImport = async () => {
+    const validRows = importRows.filter(r => r.status === 'valid');
+    if (validRows.length === 0) return;
+
+    setImportLoading(true);
+    try {
+      const toInsert = validRows.map(r => ({
+        full_name: r.full_name,
+        class_id: r.class_id,
+        active: true,
+      }));
+
+      const { error } = await supabase.from('students').insert(toInsert);
+      if (error) throw error;
+
+      setImportDone(true);
+      setTimeout(() => {
+        setShowImportModal(false);
+        setImportRows([]);
+        setImportDone(false);
+        fetchData();
+      }, 1500);
+    } catch (err: any) {
+      setImportError(err.message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleDownloadTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([
+      { Nama: 'Ahmad Fulan', Kelas: 'A1' },
+      { Nama: 'Siti Aisyah', Kelas: 'B2' }
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'Template_Import_Santri.xlsx');
+  };
+
+  const handleExportData = () => {
+    const exportData = filteredStudents.map(s => ({
+      'Nama Santri': s.full_name,
+      'Kelas': s.class?.name || '-',
+      'Tingkatan': (s.class as any)?.level?.name || '-',
+      'Status': s.active ? 'Aktif' : 'Nonaktif'
+    }));
+    
+    if (exportData.length === 0) return;
+    
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Santri');
+    XLSX.writeFile(wb, 'Data_Santri_MIQ.xlsx');
+  };
+
+  const filteredStudents = students.filter(s =>
+    s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const validCount = importRows.filter(r => r.status === 'valid').length;
+  const errorCount = importRows.filter(r => r.status === 'error').length;
 
   return (
     <div className="space-y-6">
@@ -25,42 +162,40 @@ export default function StudentManagement() {
           <h2 className="text-2xl font-bold text-gray-900">Manajemen Santri</h2>
           <p className="text-gray-500">Kelola data santri, kelas, dan status keaktifan.</p>
         </div>
-        <div className="flex gap-3">
-          <button className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors">
-            <Upload size={18} />
-            Import Excel
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleExportData}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            <Download size={18} />
+            Export
           </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            <Upload size={18} />
+            Import
+          </button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
           <button className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors">
             <Plus size={18} />
-            Tambah Santri
+            Tambah
           </button>
         </div>
       </div>
 
-      {/* Toolbar / Search */}
+      {/* Toolbar */}
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
             placeholder="Cari nama santri atau kelas..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none transition-all"
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
-        </div>
-        <div className="flex gap-2">
-          <select className="border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-primary">
-            <option>Semua Tingkatan</option>
-            <option>Al-Qur'an I</option>
-            <option>Al-Qur'an II</option>
-            <option>Al-Qur'an III</option>
-          </select>
-          <select className="border border-gray-300 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-primary">
-            <option>Semua Status</option>
-            <option>Aktif</option>
-            <option>Nonaktif</option>
-          </select>
         </div>
       </div>
 
@@ -78,16 +213,20 @@ export default function StudentManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredStudents.length > 0 ? (
+              {loading ? (
+                <tr><td colSpan={5} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
+              ) : filteredStudents.length > 0 ? (
                 filteredStudents.map((student) => (
                   <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-medium text-gray-900">{student.name}</td>
-                    <td className="p-4 text-gray-600">{student.className}</td>
-                    <td className="p-4 text-gray-600">{student.level}</td>
+                    <td className="p-4 font-medium text-gray-900">{student.full_name}</td>
+                    <td className="p-4 text-gray-600">{student.class?.name || '-'}</td>
+                    <td className="p-4 text-gray-600">{(student.class as any)?.level?.name || '-'}</td>
                     <td className="p-4">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        {student.status}
-                      </span>
+                      {student.active ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aktif</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Nonaktif</span>
+                      )}
                     </td>
                     <td className="p-4 text-right">
                       <button className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100">
@@ -97,16 +236,97 @@ export default function StudentManagement() {
                   </tr>
                 ))
               ) : (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-gray-500">
-                    Tidak ada santri yang ditemukan.
-                  </td>
-                </tr>
+                <tr><td colSpan={5} className="p-8 text-center text-gray-500">Tidak ada santri yang ditemukan.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Import Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <FileSpreadsheet className="text-primary" size={24} />
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Preview Import Santri</h3>
+                  <p className="text-sm text-gray-500">
+                    <span className="text-green-600 font-semibold">{validCount} valid</span>
+                    {errorCount > 0 && <span className="text-red-500 font-semibold"> • {errorCount} error</span>}
+                    {' '}dari {importRows.length} baris
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => { setShowImportModal(false); setImportRows([]); }} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Format hint */}
+            <div className="px-6 pt-4 space-y-3">
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                💡 Format kolom Excel yang dibutuhkan: <strong>Nama</strong> dan <strong>Kelas</strong> (nama kelas harus persis sama, contoh: A1, B2, C1)
+              </div>
+              <button 
+                onClick={handleDownloadTemplate}
+                className="flex items-center gap-2 text-sm text-primary hover:text-emerald-600 font-medium"
+              >
+                <FileDown size={16} />
+                Download Contoh File Excel (Template)
+              </button>
+            </div>
+
+            {/* Rows preview */}
+            <div className="flex-1 overflow-auto p-6">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="bg-gray-50 text-gray-500 uppercase text-xs tracking-wider">
+                    <th className="p-3 text-left rounded-tl-lg">Nama</th>
+                    <th className="p-3 text-left">Kelas</th>
+                    <th className="p-3 text-left rounded-tr-lg">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {importRows.map((row, i) => (
+                    <tr key={i} className={row.status === 'error' ? 'bg-red-50' : 'hover:bg-gray-50'}>
+                      <td className="p-3 font-medium text-gray-900">{row.full_name || <span className="text-gray-400 italic">kosong</span>}</td>
+                      <td className="p-3 text-gray-600">{row.class_name || '-'}</td>
+                      <td className="p-3">
+                        {row.status === 'valid' ? (
+                          <span className="flex items-center gap-1 text-green-600 font-medium"><CheckCircle size={14} /> Valid</span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-red-500 font-medium"><AlertCircle size={14} /> {row.error}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-gray-100 flex gap-3 items-center">
+              {importError && <p className="text-sm text-red-500 flex-1">{importError}</p>}
+              {importDone && <p className="text-sm text-green-600 font-bold flex-1">✅ {validCount} santri berhasil diimport!</p>}
+              {!importDone && !importError && <div className="flex-1" />}
+              <button onClick={() => { setShowImportModal(false); setImportRows([]); }} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50">
+                Batal
+              </button>
+              <button
+                onClick={handleImport}
+                disabled={validCount === 0 || importLoading || importDone}
+                className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-2"
+              >
+                {importLoading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                Import {validCount} Santri
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

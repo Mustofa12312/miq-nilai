@@ -29,6 +29,15 @@ export default function AdminLayout() {
             <Settings size={20} />
             Ujian
           </Link>
+          <div className="my-2 border-t border-gray-100"></div>
+          <Link to="/admin/reports" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-primary/10 hover:text-primary font-medium transition-colors">
+            <LayoutDashboard size={20} />
+            Laporan
+          </Link>
+          <Link to="/admin/users" className="flex items-center gap-3 px-3 py-2 rounded-lg text-gray-600 hover:bg-primary/10 hover:text-primary font-medium transition-colors">
+            <Users size={20} />
+            Pengguna
+          </Link>
         </nav>
         <div className="p-4 border-t border-gray-200">
           <button 

@@ -14,11 +14,16 @@ export default function Login() {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user && profile) {
-      if (['super_admin', 'admin'].includes(profile.role)) {
-        navigate('/admin', { replace: true });
-      } else if (profile.role === 'examiner') {
-        navigate('/examiner', { replace: true });
+    if (user) {
+      if (profile) {
+        if (['super_admin', 'admin'].includes(profile.role)) {
+          navigate('/admin', { replace: true });
+        } else if (profile.role === 'examiner') {
+          navigate('/examiner', { replace: true });
+        }
+      } else {
+        setError('Login berhasil, namun profil Admin/Penguji tidak ditemukan. Pastikan Anda telah memasukkan User UID ke tabel "profiles" di Supabase.');
+        setIsLoading(false);
       }
     }
   }, [user, profile, navigate]);

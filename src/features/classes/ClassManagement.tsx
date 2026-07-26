@@ -1,15 +1,67 @@
+import { useState, useEffect } from 'react';
 import { Plus, MoreHorizontal } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import type { Class, Level } from '../../types';
 
-// MOCK DATA
-const MOCK_CLASSES = [
-  { id: 1, name: 'A1', level: "Al-Qur'an I", total_students: 34, active: true },
-  { id: 2, name: 'A2', level: "Al-Qur'an I", total_students: 31, active: true },
-  { id: 3, name: 'B1', level: "Al-Qur'an II", total_students: 29, active: true },
-  { id: 4, name: 'B2', level: "Al-Qur'an II", total_students: 30, active: true },
-  { id: 5, name: 'C1', level: "Al-Qur'an III", total_students: 35, active: true },
-];
+interface ClassData extends Class {
+  level?: Level;
+  student_count?: number;
+}
 
 export default function ClassManagement() {
+  const [classes, setClasses] = useState<ClassData[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        // Fetch levels
+        const { data: levelsData } = await supabase
+          .from('levels')
+          .select('*')
+          .order('sort_order', { ascending: true });
+        if (levelsData) setLevels(levelsData);
+
+        // Fetch classes
+        const { data: classesData } = await supabase
+          .from('classes')
+          .select(`
+            *,
+            level:levels(*)
+          `)
+          .order('name', { ascending: true });
+        
+        if (classesData) {
+          // For a real app, we might want to do a count query or a view
+          // For MVP, we'll just fetch all students and count them client side, or ignore the count for now.
+          // Let's just mock the student count if we can't do a quick join.
+          const { data: studentCounts } = await supabase
+             .from('students')
+             .select('class_id');
+             
+          const counts: Record<number, number> = {};
+          studentCounts?.forEach(s => {
+             counts[s.class_id] = (counts[s.class_id] || 0) + 1;
+          });
+          
+          const mapped = classesData.map(c => ({
+            ...c,
+            student_count: counts[c.id] || 0
+          }));
+          
+          setClasses(mapped as any);
+        }
+      } catch (err) {
+        console.error('Error fetching classes:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchData();
+  }, []);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -31,7 +83,7 @@ export default function ClassManagement() {
         <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
             <h3 className="font-bold text-gray-900">Daftar Kelas</h3>
-            <span className="text-sm text-gray-500">{MOCK_CLASSES.length} Kelas Aktif</span>
+            <span className="text-sm text-gray-500">{classes.length} Kelas Aktif</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -44,11 +96,13 @@ export default function ClassManagement() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {MOCK_CLASSES.map((cls) => (
+                {loading ? (
+                   <tr><td colSpan={4} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
+                ) : classes.map((cls) => (
                   <tr key={cls.id} className="hover:bg-gray-50 transition-colors">
                     <td className="p-4 font-bold text-gray-900">{cls.name}</td>
-                    <td className="p-4 text-gray-600">{cls.level}</td>
-                    <td className="p-4 text-gray-600">{cls.total_students}</td>
+                    <td className="p-4 text-gray-600">{cls.level?.name || '-'}</td>
+                    <td className="p-4 text-gray-600">{cls.student_count}</td>
                     <td className="p-4 text-right">
                       <button className="text-gray-400 hover:text-primary p-1 rounded-md hover:bg-gray-100 transition-colors">
                         <MoreHorizontal size={20} />
@@ -68,9 +122,11 @@ export default function ClassManagement() {
             <button className="text-primary hover:text-emerald-700 text-sm font-medium">Tambah</button>
           </div>
           <ul className="divide-y divide-gray-100">
-            {["Al-Qur'an I", "Al-Qur'an II", "Al-Qur'an III", "Tahfidz"].map((level, idx) => (
-              <li key={idx} className="p-4 hover:bg-gray-50 flex justify-between items-center group cursor-pointer transition-colors">
-                <span className="font-medium text-gray-700">{level}</span>
+            {loading ? (
+               <li className="p-4 text-center text-gray-500">Memuat data...</li>
+            ) : levels.map((level) => (
+              <li key={level.id} className="p-4 hover:bg-gray-50 flex justify-between items-center group cursor-pointer transition-colors">
+                <span className="font-medium text-gray-700">{level.name}</span>
                 <span className="text-gray-400 group-hover:text-primary opacity-0 group-hover:opacity-100 transition-opacity">Edit</span>
               </li>
             ))}
