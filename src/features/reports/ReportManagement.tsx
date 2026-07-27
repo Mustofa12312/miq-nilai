@@ -13,7 +13,7 @@ interface ReportData {
   created_at: string;
   student: { full_name: string; class: { name: string; level: { name: string } } };
   session: { examiner: { full_name: string }, period: { name: string } };
-  details: { errors: number; criteria: { name: string } }[];
+  details: { mistakes: number; criteria: { name: string } }[];
 }
 
 export default function ReportManagement() {
@@ -29,40 +29,48 @@ export default function ReportManagement() {
 
   const fetchData = async () => {
     try {
-      const [reportsRes, classesRes, levelsRes] = await Promise.all([
-        supabase
-          .from('scores')
-          .select(`
-            id,
-            total_score,
-            grade,
-            locked,
-            created_at,
-            student:students (
-              full_name,
-              class:classes (
-                name,
-                level:levels (name)
-              )
-            ),
-            session:score_sessions (
-              period:exam_periods (name),
-              examiner:profiles (full_name)
-            ),
-            details:score_details (
-              errors,
-              criteria:exam_criteria (name)
-            )
-          `)
-          .order('created_at', { ascending: false }),
+      // Fetch classes and levels first (these are simpler and less likely to fail)
+      const [classesRes, levelsRes] = await Promise.all([
         supabase.from('classes').select('name, level:levels(name)').order('name'),
         supabase.from('levels').select('name').order('sort_order')
       ]);
 
-      if (reportsRes.error) throw reportsRes.error;
-      if (reportsRes.data) setReports(reportsRes.data as any);
+      if (classesRes.error) console.error('Classes fetch error:', classesRes.error);
+      if (levelsRes.error) console.error('Levels fetch error:', levelsRes.error);
       if (classesRes.data) setClasses(classesRes.data as any);
       if (levelsRes.data) setLevels(levelsRes.data);
+
+      // Fetch reports (scores) separately so dropdown data still loads even if this fails
+      const reportsRes = await supabase
+        .from('scores')
+        .select(`
+          id,
+          total_score,
+          grade,
+          locked,
+          created_at,
+          student:students (
+            full_name,
+            class:classes (
+              name,
+              level:levels (name)
+            )
+          ),
+          session:score_sessions (
+            period:exam_periods (name),
+            examiner:profiles (full_name)
+          ),
+          details:score_details (
+            mistakes,
+            criteria (name)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (reportsRes.error) {
+        console.error('Reports fetch error:', reportsRes.error);
+      }
+      if (reportsRes.data) setReports(reportsRes.data as any);
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -106,7 +114,7 @@ export default function ReportManagement() {
       if (r.details && r.details.length > 0) {
         r.details.forEach(d => {
           if (d.criteria?.name) {
-            baseRow[`Salah ${d.criteria.name}`] = d.errors;
+            baseRow[`Salah ${d.criteria.name}`] = d.mistakes;
           }
         });
       }
