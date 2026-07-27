@@ -3,7 +3,7 @@ import { Search, FileSpreadsheet, FileDown } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 
 interface ReportData {
   id: number;
@@ -13,6 +13,7 @@ interface ReportData {
   created_at: string;
   student: { full_name: string; class: { name: string; level: { name: string } } };
   session: { examiner: { full_name: string }, period: { name: string } };
+  details: { errors: number; criteria: { name: string } }[];
 }
 
 export default function ReportManagement() {
@@ -47,6 +48,10 @@ export default function ReportManagement() {
             session:score_sessions (
               period:exam_periods (name),
               examiner:profiles (full_name)
+            ),
+            details:score_details (
+              errors,
+              criteria:exam_criteria (name)
             )
           `)
           .order('created_at', { ascending: false }),
@@ -90,17 +95,31 @@ export default function ReportManagement() {
   const handleExportExcel = () => {
     if (filteredReports.length === 0) return alert('Tidak ada data untuk diexport');
     
-    const exportData = filteredReports.map(r => ({
-      'Nama Santri': r.student?.full_name,
-      'Tingkatan': r.student?.class?.level?.name,
-      'Kelas': r.student?.class?.name,
-      'Total Nilai': r.total_score,
-      'Predikat': r.grade,
-      'Penguji': r.session?.examiner?.full_name,
-      'Periode': r.session?.period?.name,
-      'Tanggal': new Date(r.created_at).toLocaleDateString('id-ID'),
-      'Status': r.locked ? 'Terkunci' : 'Terbuka'
-    }));
+    const exportData = filteredReports.map(r => {
+      const baseRow: any = {
+        'Nama Santri': r.student?.full_name,
+        'Tingkatan': r.student?.class?.level?.name,
+        'Kelas': r.student?.class?.name,
+      };
+
+      // Tambahkan kolom kesalahan berdasarkan kriteria
+      if (r.details && r.details.length > 0) {
+        r.details.forEach(d => {
+          if (d.criteria?.name) {
+            baseRow[`Salah ${d.criteria.name}`] = d.errors;
+          }
+        });
+      }
+
+      baseRow['Total Nilai'] = r.total_score;
+      baseRow['Predikat'] = r.grade;
+      baseRow['Penguji'] = r.session?.examiner?.full_name;
+      baseRow['Periode'] = r.session?.period?.name;
+      baseRow['Tanggal'] = new Date(r.created_at).toLocaleDateString('id-ID');
+      baseRow['Status'] = r.locked ? 'Terkunci' : 'Terbuka';
+
+      return baseRow;
+    });
 
     const worksheet = XLSX.utils.json_to_sheet(exportData);
     const workbook = XLSX.utils.book_new();
@@ -129,7 +148,7 @@ export default function ReportManagement() {
       r.session?.examiner?.full_name
     ]);
 
-    (doc as any).autoTable({
+    autoTable(doc, {
       head: [['No', 'Nama Santri', 'Kelas', 'Total Nilai', 'Predikat', 'Penguji']],
       body: tableData,
       startY: 35,
