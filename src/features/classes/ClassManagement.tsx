@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, MoreHorizontal, Loader2, Edit2, Trash2, X, Save } from 'lucide-react';
+import { Plus, Loader2, Edit2, Trash2, X, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Class, Level } from '../../types';
 
