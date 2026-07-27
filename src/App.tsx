@@ -14,6 +14,8 @@ import ExaminerDashboard from './features/dashboard/ExaminerDashboard';
 import StudentList from './features/classes/StudentList';
 import ScoringForm from './features/scores/ScoringForm';
 
+import ExaminerProfile from './features/profile/ExaminerProfile';
+
 // Admin Master Data Pages
 import StudentManagement from './features/students/StudentManagement';
 import ClassManagement from './features/classes/ClassManagement';
@@ -53,7 +55,7 @@ function App() {
               <Route index element={<ExaminerDashboard />} />
               <Route path="class/:classId" element={<StudentList />} />
               <Route path="class/:classId/student/:studentId" element={<ScoringForm />} />
-              <Route path="profile" element={<div className="p-4">Menu Profil</div>} />
+              <Route path="profile" element={<ExaminerProfile />} />
             </Route>
           </Route>
           

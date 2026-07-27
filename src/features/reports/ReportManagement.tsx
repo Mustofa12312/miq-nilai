@@ -19,7 +19,7 @@ export default function ReportManagement() {
   const [selectedClass, setSelectedClass] = useState('Semua Kelas');
   const [selectedLevel, setSelectedLevel] = useState('Semua Tingkatan');
 
-  const [classes, setClasses] = useState<{name: string}[]>([]);
+  const [classes, setClasses] = useState<{name: string, level: {name: string}}[]>([]);
   const [levels, setLevels] = useState<{name: string}[]>([]);
 
   useEffect(() => {
@@ -46,13 +46,13 @@ export default function ReportManagement() {
               )
             `)
             .order('created_at', { ascending: false }),
-          supabase.from('classes').select('name').order('name'),
+          supabase.from('classes').select('name, level:levels(name)').order('name'),
           supabase.from('levels').select('name').order('sort_order')
         ]);
 
         if (reportsRes.error) throw reportsRes.error;
         if (reportsRes.data) setReports(reportsRes.data as any);
-        if (classesRes.data) setClasses(classesRes.data);
+        if (classesRes.data) setClasses(classesRes.data as any);
         if (levelsRes.data) setLevels(levelsRes.data);
       } catch (err) {
         console.error('Error fetching data:', err);
@@ -64,8 +64,16 @@ export default function ReportManagement() {
     fetchData();
   }, []);
 
-  const uniqueClasses = classes.map(c => c.name);
+  // Cascading dropdown logic: when level changes, reset class
+  useEffect(() => {
+    setSelectedClass('Semua Kelas');
+  }, [selectedLevel]);
+
   const uniqueLevels = levels.map(l => l.name);
+  const filteredClassesList = selectedLevel === 'Semua Tingkatan' 
+    ? classes 
+    : classes.filter(c => c.level?.name === selectedLevel);
+  const uniqueClasses = filteredClassesList.map(c => c.name);
 
   const filteredReports = reports.filter(r => {
     const matchSearch = r.student?.full_name.toLowerCase().includes(searchTerm.toLowerCase());
