@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Upload, MoreHorizontal, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown } from 'lucide-react';
+import { Search, Plus, Upload, MoreHorizontal, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
 import type { Student, Class, Level } from '../../types';
@@ -146,6 +146,18 @@ export default function StudentManagement() {
     XLSX.writeFile(wb, 'Data_Santri_MIQ.xlsx');
   };
 
+  const handleDelete = async (studentId: string, studentName: string) => {
+    if (window.confirm(`Apakah Anda yakin ingin menghapus santri "${studentName}"?\nData nilai yang terkait dengan santri ini mungkin juga akan terhapus.`)) {
+      try {
+        const { error } = await supabase.from('students').delete().eq('id', studentId);
+        if (error) throw error;
+        fetchData();
+      } catch (err: any) {
+        alert(`Gagal menghapus santri: ${err.message}`);
+      }
+    }
+  };
+
   const filteredStudents = students.filter(s =>
     s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -229,8 +241,12 @@ export default function StudentManagement() {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <button className="text-gray-400 hover:text-gray-600 p-1 rounded-md hover:bg-gray-100">
-                        <MoreHorizontal size={20} />
+                      <button 
+                        onClick={() => handleDelete(student.id, student.full_name)}
+                        className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-colors inline-flex items-center justify-center"
+                        title="Hapus Santri"
+                      >
+                        <Trash2 size={18} />
                       </button>
                     </td>
                   </tr>
