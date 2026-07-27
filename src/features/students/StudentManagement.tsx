@@ -147,14 +147,46 @@ export default function StudentManagement() {
   };
 
   const handleDelete = async (studentId: string, studentName: string) => {
-    if (window.confirm(`Apakah Anda yakin ingin menghapus santri "${studentName}"?\nData nilai yang terkait dengan santri ini mungkin juga akan terhapus.`)) {
-      try {
-        const { error } = await supabase.from('students').delete().eq('id', studentId);
-        if (error) throw error;
-        fetchData();
-      } catch (err: any) {
-        alert(`Gagal menghapus santri: ${err.message}`);
+    if (!window.confirm(`Apakah Anda yakin ingin menghapus santri "${studentName}"?\nSemua data nilai santri ini juga akan dihapus secara permanen.`)) {
+      return;
+    }
+
+    try {
+      // Langkah 1: Cari semua scores milik santri ini
+      const { data: scoresData } = await supabase
+        .from('scores')
+        .select('id')
+        .eq('student_id', studentId);
+
+      // Langkah 2: Hapus score_details (anak dari scores)
+      if (scoresData && scoresData.length > 0) {
+        const scoreIds = scoresData.map(s => s.id);
+        const { error: detailErr } = await supabase
+          .from('score_details')
+          .delete()
+          .in('score_id', scoreIds);
+        if (detailErr) throw detailErr;
+
+        // Langkah 3: Hapus scores
+        const { error: scoreErr } = await supabase
+          .from('scores')
+          .delete()
+          .eq('student_id', studentId);
+        if (scoreErr) throw scoreErr;
       }
+
+      // Langkah 4: Hapus santri
+      const { error: studentErr } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId);
+      if (studentErr) throw studentErr;
+
+      // Berhasil — refresh data
+      fetchData();
+    } catch (err: any) {
+      console.error('Delete error:', err);
+      alert(`Gagal menghapus santri: ${err.message}`);
     }
   };
 
