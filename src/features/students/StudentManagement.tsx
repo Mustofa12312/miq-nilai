@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Upload, MoreHorizontal, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown, Trash2 } from 'lucide-react';
+import { Search, Plus, Upload, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
 import type { Student, Class, Level } from '../../types';
@@ -146,7 +146,7 @@ export default function StudentManagement() {
     XLSX.writeFile(wb, 'Data_Santri_MIQ.xlsx');
   };
 
-  const handleDelete = async (studentId: string, studentName: string) => {
+  const handleDelete = async (studentId: number, studentName: string) => {
     if (!window.confirm(`Apakah Anda yakin ingin menghapus santri "${studentName}"?\nSemua data nilai santri ini juga akan dihapus secara permanen.`)) {
       return;
     }
