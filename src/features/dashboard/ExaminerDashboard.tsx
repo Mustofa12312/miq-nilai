@@ -38,7 +38,8 @@ export default function ExaminerDashboard() {
             *,
             level:levels(*)
           `)
-          .order('level_id'); 
+          .order('level_id')
+          .order('name'); 
 
         if (!error && classData) {
           setClasses(classData as any);

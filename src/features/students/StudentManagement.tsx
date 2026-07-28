@@ -20,7 +20,12 @@ export default function StudentManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [students, setStudents] = useState<StudentData[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filters
+  const [filterLevel, setFilterLevel] = useState<string>('all');
+  const [filterClass, setFilterClass] = useState<string>('all');
   
   // Import state
   const [showImportModal, setShowImportModal] = useState(false);
@@ -30,15 +35,22 @@ export default function StudentManagement() {
   const [importError, setImportError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Single student form state
+  const [showStudentModal, setShowStudentModal] = useState(false);
+  const [studentForm, setStudentForm] = useState({ id: 0, full_name: '', class_id: 0, active: true });
+  const [isSaving, setIsSaving] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [studentsRes, classesRes] = await Promise.all([
-        supabase.from('students').select('*, class:classes(name, level:levels(name))').order('full_name'),
-        supabase.from('classes').select('*'),
+      const [studentsRes, classesRes, levelsRes] = await Promise.all([
+        supabase.from('students').select('*, class:classes(id, name, level_id, level:levels(id, name))').order('full_name'),
+        supabase.from('classes').select('*').order('name'),
+        supabase.from('levels').select('*').order('sort_order')
       ]);
       if (studentsRes.data) setStudents(studentsRes.data as any);
       if (classesRes.data) setClasses(classesRes.data);
+      if (levelsRes.data) setLevels(levelsRes.data);
     } finally {
       setLoading(false);
     }
@@ -146,6 +158,55 @@ export default function StudentManagement() {
     XLSX.writeFile(wb, 'Data_Santri_MIQ.xlsx');
   };
 
+  const handleSaveStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      if (studentForm.id === 0) {
+        // Create
+        const { error } = await supabase.from('students').insert({
+          full_name: studentForm.full_name,
+          class_id: studentForm.class_id,
+          active: studentForm.active
+        });
+        if (error) throw error;
+      } else {
+        // Update
+        const { error } = await supabase.from('students').update({
+          full_name: studentForm.full_name,
+          class_id: studentForm.class_id,
+          active: studentForm.active
+        }).eq('id', studentForm.id);
+        if (error) throw error;
+      }
+      setShowStudentModal(false);
+      fetchData();
+    } catch (err: any) {
+      alert(`Gagal menyimpan santri: ${err.message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openStudentModal = (student?: StudentData) => {
+    if (student) {
+      setStudentForm({
+        id: student.id,
+        full_name: student.full_name,
+        class_id: student.class_id,
+        active: student.active
+      });
+    } else {
+      setStudentForm({
+        id: 0,
+        full_name: '',
+        class_id: classes.length > 0 ? classes[0].id : 0,
+        active: true
+      });
+    }
+    setShowStudentModal(true);
+  };
+
   const handleDelete = async (studentId: number, studentName: string) => {
     if (!window.confirm(`Apakah Anda yakin ingin menghapus santri "${studentName}"?\nSemua data nilai santri ini juga akan dihapus secara permanen.`)) {
       return;
@@ -190,10 +251,18 @@ export default function StudentManagement() {
     }
   };
 
-  const filteredStudents = students.filter(s =>
-    s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const studentLevelId = (s.class as any)?.level?.id?.toString() || '';
+    const matchesLevel = filterLevel === 'all' || studentLevelId === filterLevel;
+
+    const studentClassId = s.class_id?.toString() || '';
+    const matchesClass = filterClass === 'all' || studentClassId === filterClass;
+
+    return matchesSearch && matchesLevel && matchesClass;
+  });
 
   const validCount = importRows.filter(r => r.status === 'valid').length;
   const errorCount = importRows.filter(r => r.status === 'error').length;
@@ -222,7 +291,10 @@ export default function StudentManagement() {
             Import
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
-          <button className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors">
+          <button 
+            onClick={() => openStudentModal()}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
+          >
             <Plus size={18} />
             Tambah
           </button>
@@ -241,6 +313,28 @@ export default function StudentManagement() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+        <select
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white text-gray-700 min-w-[180px]"
+          value={filterLevel}
+          onChange={(e) => { setFilterLevel(e.target.value); setFilterClass('all'); }}
+        >
+          <option value="all">Semua Tingkatan</option>
+          {levels.map(l => (
+            <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+        </select>
+        <select
+          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white text-gray-700 min-w-[150px]"
+          value={filterClass}
+          onChange={(e) => setFilterClass(e.target.value)}
+        >
+          <option value="all">Semua Kelas</option>
+          {classes
+            .filter(c => filterLevel === 'all' || c.level_id.toString() === filterLevel)
+            .map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+        </select>
       </div>
 
       {/* Table */}
@@ -273,13 +367,22 @@ export default function StudentManagement() {
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <button 
-                        onClick={() => handleDelete(student.id, student.full_name)}
-                        className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-colors inline-flex items-center justify-center"
-                        title="Hapus Santri"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <div className="flex justify-end gap-2">
+                        <button 
+                          onClick={() => openStudentModal(student)}
+                          className="text-blue-500 hover:text-blue-700 p-1.5 rounded-md hover:bg-blue-50 transition-colors inline-flex items-center justify-center"
+                          title="Edit Santri"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(student.id, student.full_name)}
+                          className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-colors inline-flex items-center justify-center"
+                          title="Hapus Santri"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -372,6 +475,64 @@ export default function StudentManagement() {
                 Import {validCount} Santri
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Student Modal */}
+      {showStudentModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-900">{studentForm.id === 0 ? 'Tambah Santri' : 'Edit Santri'}</h3>
+              <button onClick={() => setShowStudentModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveStudent} className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                <input 
+                  type="text" required 
+                  placeholder="Masukkan nama santri"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  value={studentForm.full_name}
+                  onChange={(e) => setStudentForm(p => ({ ...p, full_name: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                <select 
+                  required
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  value={studentForm.class_id}
+                  onChange={(e) => setStudentForm(p => ({ ...p, class_id: parseInt(e.target.value) }))}
+                >
+                  <option value={0} disabled>Pilih Kelas</option>
+                  {classes.map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({(c as any).level?.name || 'Tanpa Tingkat'})</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <input 
+                  type="checkbox" 
+                  id="active-status"
+                  checked={studentForm.active}
+                  onChange={(e) => setStudentForm(p => ({ ...p, active: e.target.checked }))}
+                  className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4"
+                />
+                <label htmlFor="active-status" className="text-sm font-medium text-gray-700 cursor-pointer">
+                  Status Santri Aktif
+                </label>
+              </div>
+              <div className="pt-4 flex gap-3">
+                <button type="button" onClick={() => setShowStudentModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">Batal</button>
+                <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-emerald-600 flex justify-center items-center gap-2">
+                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : 'Simpan'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
