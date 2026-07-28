@@ -49,7 +49,12 @@ export default function StudentManagement() {
         supabase.from('levels').select('*').order('sort_order')
       ]);
       if (studentsRes.data) setStudents(studentsRes.data as any);
-      if (classesRes.data) setClasses(classesRes.data);
+      if (classesRes.data) {
+        const sortedClasses = [...classesRes.data].sort((a, b) => 
+          a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+        );
+        setClasses(sortedClasses);
+      }
       if (levelsRes.data) setLevels(levelsRes.data);
     } finally {
       setLoading(false);

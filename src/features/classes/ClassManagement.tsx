@@ -55,7 +55,7 @@ export default function ClassManagement() {
         const mapped = classesData.map(c => ({
           ...c,
           student_count: counts[c.id] || 0
-        }));
+        })).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         
         setClasses(mapped as any);
       }
