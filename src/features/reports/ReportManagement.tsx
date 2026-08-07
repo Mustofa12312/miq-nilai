@@ -70,7 +70,7 @@ export default function ReportManagement() {
           )
         `)
         .eq('active', true)
-        .order('full_name');
+        .order('id', { ascending: true });
 
       if (studentsRes.error) {
         console.error('Students fetch error:', studentsRes.error);
