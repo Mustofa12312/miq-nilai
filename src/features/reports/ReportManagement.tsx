@@ -6,14 +6,16 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
 interface ReportData {
-  id: number;
-  total_score: number;
+  row_id: string;
+  id: number; // score id (0 if missing)
+  total_score: number | null;
   grade: string;
   locked: boolean;
-  created_at: string;
+  created_at: string | null;
   student: { full_name: string; class: { name: string; level: { name: string } } };
-  session: { examiner: { full_name: string }, period: { name: string } };
-  details: { mistakes: number; criteria: { name: string } }[];
+  session: { examiner: { full_name: string }, period: { name: string } } | null;
+  details: { mistakes: number; criteria: { name: string } }[] | null;
+  is_missing?: boolean;
 }
 
 export default function ReportManagement() {
@@ -40,37 +42,78 @@ export default function ReportManagement() {
       if (classesRes.data) setClasses(classesRes.data as any);
       if (levelsRes.data) setLevels(levelsRes.data);
 
-      // Fetch reports (scores) separately so dropdown data still loads even if this fails
-      const reportsRes = await supabase
-        .from('scores')
+      // Fetch students with their scores to also show those who haven't taken exams
+      const studentsRes = await supabase
+        .from('students')
         .select(`
           id,
-          total_score,
-          grade,
-          locked,
-          created_at,
-          student:students (
-            full_name,
-            class:classes (
-              name,
-              level:levels (name)
+          full_name,
+          active,
+          class:classes (
+            name,
+            level:levels (name)
+          ),
+          scores (
+            id,
+            total_score,
+            grade,
+            locked,
+            created_at,
+            session:score_sessions (
+              period:exam_periods (name),
+              examiner:profiles (full_name)
+            ),
+            details:score_details (
+              mistakes,
+              criteria (name)
             )
-          ),
-          session:score_sessions (
-            period:exam_periods (name),
-            examiner:profiles (full_name)
-          ),
-          details:score_details (
-            mistakes,
-            criteria (name)
           )
         `)
-        .order('created_at', { ascending: false });
+        .eq('active', true)
+        .order('full_name');
 
-      if (reportsRes.error) {
-        console.error('Reports fetch error:', reportsRes.error);
+      if (studentsRes.error) {
+        console.error('Students fetch error:', studentsRes.error);
       }
-      if (reportsRes.data) setReports(reportsRes.data as any);
+      
+      if (studentsRes.data) {
+        const newReports: ReportData[] = [];
+        studentsRes.data.forEach((student: any) => {
+          if (student.scores && student.scores.length > 0) {
+            // Sort scores by newest first if multiple
+            student.scores.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            
+            student.scores.forEach((score: any) => {
+              newReports.push({
+                row_id: `score_${score.id}`,
+                id: score.id,
+                total_score: score.total_score,
+                grade: score.grade,
+                locked: score.locked,
+                created_at: score.created_at,
+                student: { full_name: student.full_name, class: student.class },
+                session: score.session,
+                details: score.details,
+                is_missing: false
+              });
+            });
+          } else {
+            newReports.push({
+              row_id: `student_${student.id}`,
+              id: 0,
+              total_score: null,
+              grade: '-',
+              locked: false,
+              created_at: null,
+              student: { full_name: student.full_name, class: student.class },
+              session: null,
+              details: null,
+              is_missing: true
+            });
+          }
+        });
+        setReports(newReports);
+      }
     } catch (err) {
       console.error('Error fetching data:', err);
     } finally {
@@ -119,12 +162,12 @@ export default function ReportManagement() {
         });
       }
 
-      baseRow['Total Nilai'] = r.total_score;
-      baseRow['Predikat'] = r.grade;
-      baseRow['Penguji'] = r.session?.examiner?.full_name;
-      baseRow['Periode'] = r.session?.period?.name;
-      baseRow['Tanggal'] = new Date(r.created_at).toLocaleDateString('id-ID');
-      baseRow['Status'] = r.locked ? 'Terkunci' : 'Terbuka';
+      baseRow['Total Nilai'] = r.is_missing ? 'Belum Ujian' : r.total_score;
+      baseRow['Predikat'] = r.is_missing ? 'Belum Ujian' : r.grade;
+      baseRow['Penguji'] = r.is_missing ? '-' : r.session?.examiner?.full_name;
+      baseRow['Periode'] = r.is_missing ? '-' : r.session?.period?.name;
+      baseRow['Tanggal'] = r.is_missing || !r.created_at ? '-' : new Date(r.created_at).toLocaleDateString('id-ID');
+      baseRow['Status'] = r.is_missing ? 'Belum Ujian' : (r.locked ? 'Terkunci' : 'Terbuka');
 
       return baseRow;
     });
@@ -151,9 +194,9 @@ export default function ReportManagement() {
       index + 1,
       r.student?.full_name,
       `${r.student?.class?.name} (${r.student?.class?.level?.name})`,
-      r.total_score,
-      r.grade,
-      r.session?.examiner?.full_name
+      r.is_missing ? 'Belum' : r.total_score,
+      r.is_missing ? 'Belum Ujian' : r.grade,
+      r.is_missing ? '-' : r.session?.examiner?.full_name
     ]);
 
     autoTable(doc, {
@@ -262,40 +305,54 @@ export default function ReportManagement() {
                 </tr>
               ) : filteredReports.length > 0 ? (
                 filteredReports.map((report) => (
-                  <tr key={report.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={report.row_id} className="hover:bg-gray-50 transition-colors">
                     <td className="p-4 font-bold text-gray-900">{report.student?.full_name}</td>
                     <td className="p-4 text-gray-600">
                       {report.student?.class?.name} <span className="text-xs text-gray-400">({report.student?.class?.level?.name})</span>
                     </td>
                     <td className="p-4 text-center">
-                      <span className="font-bold text-lg text-primary">{report.total_score}</span>
+                      {report.is_missing ? (
+                        <span className="text-gray-400">-</span>
+                      ) : (
+                        <span className="font-bold text-lg text-primary">{report.total_score}</span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                        ${report.grade === 'Mumtaz' ? 'bg-primary text-white' : 
-                          report.grade === 'Jayyid Jiddan' ? 'bg-emerald-100 text-emerald-800' : 
-                          report.grade === 'Jayyid' ? 'bg-blue-100 text-blue-800' : 
-                          'bg-warning text-yellow-900'}`}>
-                        {report.grade}
-                      </span>
+                      {report.is_missing ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          Belum Ujian
+                        </span>
+                      ) : (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                          ${report.grade === 'Mumtaz' ? 'bg-primary text-white' : 
+                            report.grade === 'Jayyid Jiddan' ? 'bg-emerald-100 text-emerald-800' : 
+                            report.grade === 'Jayyid' ? 'bg-blue-100 text-blue-800' : 
+                            'bg-warning text-yellow-900'}`}>
+                          {report.grade}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-center">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
-                        ${report.locked ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>
-                        {report.locked ? 'Terkunci' : 'Terbuka'}
-                      </span>
+                      {!report.is_missing && (
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                          ${report.locked ? 'bg-gray-100 text-gray-600' : 'bg-blue-50 text-blue-600'}`}>
+                          {report.locked ? 'Terkunci' : 'Terbuka'}
+                        </span>
+                      )}
                     </td>
                     <td className="p-4 text-sm text-gray-600">
-                      {report.session?.examiner?.full_name || 'Ust. Ahmad'}
+                      {report.is_missing ? '-' : (report.session?.examiner?.full_name || 'Ust. Ahmad')}
                     </td>
                     <td className="p-4 text-right">
-                       <button 
-                         onClick={() => handleToggleLock(report.id, report.locked)}
-                         className={`text-xs font-medium px-3 py-1 rounded-full transition-colors
-                           ${report.locked ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
-                       >
-                         {report.locked ? 'Buka Kunci' : 'Kunci Nilai'}
-                       </button>
+                       {!report.is_missing && (
+                         <button 
+                           onClick={() => handleToggleLock(report.id, report.locked)}
+                           className={`text-xs font-medium px-3 py-1 rounded-full transition-colors
+                             ${report.locked ? 'bg-gray-200 text-gray-700 hover:bg-gray-300' : 'bg-red-50 text-red-600 hover:bg-red-100'}`}
+                         >
+                           {report.locked ? 'Buka Kunci' : 'Kunci Nilai'}
+                         </button>
+                       )}
                     </td>
                   </tr>
                 ))
