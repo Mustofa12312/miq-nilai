@@ -192,11 +192,11 @@ export default function ReportManagement() {
 
     const tableData = filteredReports.map((r, index) => [
       index + 1,
-      r.student?.full_name,
-      `${r.student?.class?.name} (${r.student?.class?.level?.name})`,
-      r.is_missing ? 'Belum' : r.total_score,
-      r.is_missing ? 'Belum Ujian' : r.grade,
-      r.is_missing ? '-' : r.session?.examiner?.full_name
+      r.student?.full_name || '-',
+      `${r.student?.class?.name || '-'} (${r.student?.class?.level?.name || '-'})`,
+      r.is_missing ? 'Belum' : (r.total_score ?? '-'),
+      r.is_missing ? 'Belum Ujian' : (r.grade || '-'),
+      r.is_missing ? '-' : (r.session?.examiner?.full_name || '-')
     ]);
 
     autoTable(doc, {
