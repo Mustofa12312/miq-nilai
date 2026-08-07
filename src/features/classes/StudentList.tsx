@@ -33,7 +33,8 @@ export default function StudentList() {
           .from('students')
           .select('*')
           .eq('class_id', classId)
-          .eq('active', true);
+          .eq('active', true)
+          .order('id', { ascending: true });
 
         if (studentsData) {
           // Check if scored (Simplification: fetch all scores for this class)
