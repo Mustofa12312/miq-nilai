@@ -44,7 +44,7 @@ export default function StudentManagement() {
     setLoading(true);
     try {
       const [studentsRes, classesRes, levelsRes] = await Promise.all([
-        supabase.from('students').select('*, class:classes(id, name, level_id, level:levels(id, name))').order('full_name'),
+        supabase.from('students').select('*, class:classes(id, name, level_id, level:levels(id, name))').order('id', { ascending: true }),
         supabase.from('classes').select('*').order('name'),
         supabase.from('levels').select('*').order('sort_order')
       ]);
