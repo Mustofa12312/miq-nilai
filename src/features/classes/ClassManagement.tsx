@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Plus, Loader2, Edit2, Trash2, X, Save } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import type { Class, Level } from '../../types';
 
@@ -90,11 +91,12 @@ export default function ClassManagement() {
           sort_order: levelForm.sort_order 
         }).eq('id', levelForm.id);
       }
+      toast.success('Data tingkatan berhasil disimpan');
       setShowLevelModal(false);
       fetchData();
     } catch (err) {
       console.error(err);
-      alert('Gagal menyimpan tingkatan');
+      toast.error('Gagal menyimpan tingkatan');
     } finally {
       setIsSaving(false);
     }
@@ -107,7 +109,7 @@ export default function ClassManagement() {
       if (error) throw error;
       fetchData();
     } catch (err: any) {
-      alert('Gagal menghapus: ' + err.message);
+      toast.error('Gagal menghapus: ' + err.message);
     }
   };
 
@@ -138,11 +140,12 @@ export default function ClassManagement() {
           level_id: classForm.level_id 
         }).eq('id', classForm.id);
       }
+      toast.success('Data kelas berhasil disimpan');
       setShowClassModal(false);
       fetchData();
     } catch (err) {
       console.error(err);
-      alert('Gagal menyimpan kelas');
+      toast.error('Gagal menyimpan kelas');
     } finally {
       setIsSaving(false);
     }
@@ -155,7 +158,7 @@ export default function ClassManagement() {
       if (error) throw error;
       fetchData();
     } catch (err: any) {
-      alert('Gagal menghapus: ' + err.message);
+      toast.error('Gagal menghapus: ' + err.message);
     }
   };
 

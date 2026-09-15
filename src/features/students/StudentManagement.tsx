@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Upload, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 import type { Student, Class, Level } from '../../types';
 
 interface StudentData extends Student {
@@ -122,7 +123,6 @@ export default function StudentManagement() {
 
       const { error } = await supabase.from('students').insert(toInsert);
       if (error) throw error;
-
       setImportDone(true);
       setTimeout(() => {
         setShowImportModal(false);
@@ -184,10 +184,11 @@ export default function StudentManagement() {
         }).eq('id', studentForm.id);
         if (error) throw error;
       }
+      toast.success('Data santri berhasil disimpan');
       setShowStudentModal(false);
       fetchData();
     } catch (err: any) {
-      alert(`Gagal menyimpan santri: ${err.message}`);
+      toast.error(`Gagal menyimpan santri: ${err.message}`);
     } finally {
       setIsSaving(false);
     }
@@ -252,7 +253,7 @@ export default function StudentManagement() {
       fetchData();
     } catch (err: any) {
       console.error('Delete error:', err);
-      alert(`Gagal menghapus santri: ${err.message}`);
+      toast.error(`Gagal menghapus santri: ${err.message}`);
     }
   };
 

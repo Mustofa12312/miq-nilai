@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { Toaster } from 'react-hot-toast';
 
 // Layouts
 import AuthLayout from './layouts/AuthLayout';
@@ -13,11 +14,13 @@ import AdminDashboard from './features/dashboard/AdminDashboard';
 import ExaminerDashboard from './features/dashboard/ExaminerDashboard';
 import StudentList from './features/classes/StudentList';
 import ScoringForm from './features/scores/ScoringForm';
+import ScoreVerification from './features/scores/ScoreVerification';
 
 import ExaminerProfile from './features/profile/ExaminerProfile';
 
 // Admin Master Data Pages
 import StudentManagement from './features/students/StudentManagement';
+import LevelManagement from './features/levels/LevelManagement';
 import ClassManagement from './features/classes/ClassManagement';
 import ExamManagement from './features/exams/ExamManagement';
 import ReportManagement from './features/reports/ReportManagement';
@@ -26,6 +29,7 @@ import UserManagement from './features/users/UserManagement';
 function App() {
   return (
     <AuthProvider>
+      <Toaster position="top-right" />
       <BrowserRouter>
         <Routes>
           {/* Redirect root to login */}
@@ -41,10 +45,12 @@ function App() {
             <Route path="/admin" element={<AdminLayout />}>
               <Route index element={<AdminDashboard />} />
               <Route path="students" element={<StudentManagement />} />
+              <Route path="levels" element={<LevelManagement />} />
               <Route path="classes" element={<ClassManagement />} />
               <Route path="exams" element={<ExamManagement />} />
               <Route path="reports" element={<ReportManagement />} />
               <Route path="users" element={<UserManagement />} />
+              <Route path="verification" element={<ScoreVerification />} />
               <Route path="settings" element={<div className="p-4">Menu Pengaturan</div>} />
             </Route>
           </Route>

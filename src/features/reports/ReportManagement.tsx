@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import toast from 'react-hot-toast';
 
 interface ReportData {
   row_id: string;
@@ -144,7 +145,7 @@ export default function ReportManagement() {
   });
 
   const handleExportExcel = () => {
-    if (filteredReports.length === 0) return alert('Tidak ada data untuk diexport');
+    if (filteredReports.length === 0) return toast.error('Tidak ada data untuk diexport');
     
     const exportData = filteredReports.map(r => {
       const baseRow: any = {
@@ -180,7 +181,7 @@ export default function ReportManagement() {
   };
 
   const handleExportPDF = () => {
-    if (filteredReports.length === 0) return alert('Tidak ada data untuk diexport');
+    if (filteredReports.length === 0) return toast.error('Tidak ada data untuk diexport');
 
     const doc = new jsPDF();
     
@@ -221,7 +222,7 @@ export default function ReportManagement() {
       fetchData();
     } catch (err) {
       console.error('Error toggling lock:', err);
-      alert('Gagal mengunci/membuka nilai');
+      toast.error('Gagal mengunci/membuka nilai');
     }
   };
 

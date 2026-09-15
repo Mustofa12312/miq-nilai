@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Settings, X, Loader2, Save, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import toast from 'react-hot-toast';
 import type { ExamPeriod } from '../../types';
 
 interface Criteria {
@@ -72,7 +73,7 @@ export default function ExamManagement() {
       fetchData();
     } catch (error) {
       console.error(error);
-      alert('Gagal menghapus periode. Mungkin ada data nilai yang terikat.');
+      toast.error('Gagal menghapus periode. Mungkin ada data nilai yang terikat.');
     }
   };
 
@@ -85,6 +86,7 @@ export default function ExamManagement() {
       } else {
         await supabase.from('exam_periods').insert([periodForm]);
       }
+      toast.success('Periode berhasil disimpan');
       setShowPeriodModal(false);
       fetchData();
     } catch (error) {
@@ -114,7 +116,7 @@ export default function ExamManagement() {
       fetchData();
     } catch (error) {
       console.error(error);
-      alert('Gagal menghapus kriteria. Mungkin ada data nilai yang terikat.');
+      toast.error('Gagal menghapus kriteria. Mungkin ada data nilai yang terikat.');
     }
   };
 
@@ -127,6 +129,7 @@ export default function ExamManagement() {
       } else {
         await supabase.from('criteria').insert([criteriaForm]);
       }
+      toast.success('Kriteria berhasil disimpan');
       setShowCriteriaModal(false);
       fetchData();
     } catch (error) {

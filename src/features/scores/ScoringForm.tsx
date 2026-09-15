@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Minus, Plus, Save } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Criteria, Student } from '../../types';
@@ -163,12 +164,12 @@ export default function ScoringForm() {
         if (detailErr) throw detailErr;
       }
 
-      alert(`Nilai berhasil disimpan! Total: ${totalScore} (${grade})`);
+      toast.success(`Nilai berhasil disimpan! Total: ${totalScore} (${grade})`);
       navigate(-1);
 
     } catch (err: any) {
       console.error('Error saving score:', err);
-      alert("Gagal menyimpan nilai: " + err.message);
+      toast.error("Gagal menyimpan nilai: " + err.message);
     } finally {
       setIsSaving(false);
     }
