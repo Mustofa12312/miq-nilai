@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft, Minus, Plus, Save } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -8,7 +8,13 @@ import type { Criteria, Student } from '../../types';
 export default function ScoringForm() {
   const navigate = useNavigate();
   const { classId, studentId } = useParams();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
+
+  // FIX: Baca periodId dan examTypeId dari URL query params (dikirim dari StudentList)
+  // Jika tidak ada di URL, akan di-resolve dari database di dalam handleSave
+  const urlPeriodId = searchParams.get('periodId') ? Number(searchParams.get('periodId')) : null;
+  const urlExamTypeId = searchParams.get('examTypeId') ? Number(searchParams.get('examTypeId')) : null;
 
   const [student, setStudent] = useState<Student | null>(null);
   const [criteriaList, setCriteriaList] = useState<Criteria[]>([]);
@@ -20,11 +26,10 @@ export default function ScoringForm() {
     const loadData = async () => {
       if (!studentId) return;
       try {
-        // Fetch student info
         const { data: st } = await supabase.from('students').select('*').eq('id', studentId).single();
         if (st) setStudent(st);
 
-        // Fetch criteria
+        // Fetch criteria dari DB (bukan hardcode)
         const { data: cr } = await supabase.from('criteria').select('*').eq('active', true).order('sort_order', { ascending: true });
         if (cr) setCriteriaList(cr);
       } catch (err) {
@@ -60,26 +65,50 @@ export default function ScoringForm() {
     setIsSaving(true);
     
     try {
-      // 1. Get active period
-      let { data: period } = await supabase.from('exam_periods').select('id').eq('active', true).maybeSingle();
-      
-      // Fallback: If no active period, just get the most recent one
-      if (!period) {
-        const { data: latestPeriod } = await supabase.from('exam_periods').select('id').order('start_date', { ascending: false }).limit(1).maybeSingle();
-        if (!latestPeriod) throw new Error("Tidak ada data periode ujian di database. Harap buat periode ujian di menu Admin.");
-        period = latestPeriod;
+      // 1. Resolve period_id: pakai dari URL jika ada, fallback ke query DB
+      let periodId = urlPeriodId;
+      if (!periodId) {
+        const { data: period } = await supabase.from('exam_periods').select('id').eq('active', true).maybeSingle();
+        if (!period) {
+          const { data: latestPeriod } = await supabase.from('exam_periods').select('id').order('start_date', { ascending: false }).limit(1).maybeSingle();
+          if (!latestPeriod) throw new Error("Tidak ada data periode ujian di database. Harap buat periode ujian di menu Admin.");
+          periodId = latestPeriod.id;
+        } else {
+          periodId = period.id;
+        }
       }
 
-      // 2. We should ideally select exam_type_id, but we'll hardcode 1 (Ujian Al-Quran) for MVP
-      const examTypeId = 1;
+      // FIX: Resolve exam_type_id: pakai dari URL jika ada, fallback ke pertama di DB
+      let examTypeId = urlExamTypeId;
+      if (!examTypeId) {
+        const { data: defaultExamType } = await supabase.from('exam_types').select('id').order('id', { ascending: true }).limit(1).maybeSingle();
+        if (!defaultExamType) throw new Error("Tidak ada data jenis ujian di database. Harap tambahkan jenis ujian di menu Admin.");
+        examTypeId = defaultExamType.id;
+      }
 
-      // 3. Create score_session
+      // FIX: Cek BR-001 — apakah santri sudah punya nilai di periode + jenis ujian ini?
+      const { data: existingScore } = await supabase
+        .from('scores')
+        .select('id, locked')
+        .eq('student_id', parseInt(studentId))
+        .eq('period_id', periodId)
+        .eq('exam_type_id', examTypeId)
+        .maybeSingle();
+
+      if (existingScore) {
+        if (existingScore.locked) {
+          throw new Error("Nilai santri ini sudah dikunci dan tidak dapat diubah.");
+        }
+        throw new Error("Santri ini sudah memiliki nilai untuk periode ujian ini.");
+      }
+
+      // 2. Create score_session
       const { data: session, error: sessionErr } = await supabase
         .from('score_sessions')
         .insert({
           examiner_id: user.id,
           class_id: parseInt(classId),
-          period_id: period.id,
+          period_id: periodId,
           exam_type_id: examTypeId,
           finished_at: new Date().toISOString()
         })
@@ -88,21 +117,37 @@ export default function ScoringForm() {
         
       if (sessionErr) throw sessionErr;
 
-      // 4. Create score
+      // Hitung grade berbasis persentase
+      const maxPossibleScore = criteriaList.reduce((sum, c) => sum + c.default_score, 0);
+      const percentage = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
+      const grade = percentage >= 90 ? 'Mumtaz'
+        : percentage >= 80 ? 'Jayyid Jiddan'
+        : percentage >= 70 ? 'Jayyid'
+        : percentage >= 60 ? 'Maqbul'
+        : 'I\'adah';
+
+      // 3. Create score — FIX: sertakan period_id dan exam_type_id sesuai BR-001
       const { data: scoreRec, error: scoreErr } = await supabase
         .from('scores')
         .insert({
           session_id: session.id,
           student_id: parseInt(studentId),
           total_score: totalScore,
-          grade: totalScore >= 90 ? 'Mumtaz' : totalScore >= 80 ? 'Jayyid Jiddan' : totalScore >= 70 ? 'Jayyid' : 'Maqbul'
+          grade,
+          period_id: periodId,
+          exam_type_id: examTypeId,
         })
         .select()
         .single();
 
-      if (scoreErr) throw scoreErr;
+      if (scoreErr) {
+        if (scoreErr.code === '23505') {
+          throw new Error("Santri ini sudah memiliki nilai untuk periode ujian ini.");
+        }
+        throw scoreErr;
+      }
 
-      // 5. Create score_details
+      // 4. Create score_details
       const detailsToInsert = criteriaList.map(cr => {
         const mstk = mistakes[cr.id] || 0;
         return {
@@ -118,8 +163,7 @@ export default function ScoringForm() {
         if (detailErr) throw detailErr;
       }
 
-      // Success! Auto go back (or navigate to next student like PRD suggested)
-      alert("Nilai berhasil disimpan!");
+      alert(`Nilai berhasil disimpan! Total: ${totalScore} (${grade})`);
       navigate(-1);
 
     } catch (err: any) {
@@ -132,7 +176,6 @@ export default function ScoringForm() {
 
   if (loading) return <div className="p-8 text-center">Memuat kriteria...</div>;
 
-  // Group criteria by category
   const categories = Array.from(new Set(criteriaList.map(c => c.category)));
 
   return (

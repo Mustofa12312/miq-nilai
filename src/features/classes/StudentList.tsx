@@ -15,6 +15,9 @@ export default function StudentList() {
   const [classInfo, setClassInfo] = useState<Class | null>(null);
   const [students, setStudents] = useState<StudentWithStatus[]>([]);
   const [loading, setLoading] = useState(true);
+  // Simpan context periode dan exam_type untuk diteruskan ke ScoringForm via URL
+  const [activePeriodId, setActivePeriodId] = useState<number | null>(null);
+  const [defaultExamTypeId, setDefaultExamTypeId] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchStudents = async () => {
@@ -37,13 +40,38 @@ export default function StudentList() {
           .order('id', { ascending: true });
 
         if (studentsData) {
-          // Check if scored (Simplification: fetch all scores for this class)
-          // Ideally we query scores and join. For now we just query scores.
-          const { data: scoresData } = await supabase
-            .from('scores')
-            .select('student_id');
-            
-          const scoredStudentIds = new Set(scoresData?.map(s => s.student_id) || []);
+          // FIX: Filter scores berdasarkan periode AKTIF saja (bukan semua periode)
+          // Ambil periode aktif dulu
+          const { data: activePeriod } = await supabase
+            .from('exam_periods')
+            .select('id')
+            .eq('active', true)
+            .maybeSingle();
+
+          // Ambil exam_type default (pertama yang ada di DB, biasanya "Ujian Al-Quran")
+          const { data: defaultExamType } = await supabase
+            .from('exam_types')
+            .select('id')
+            .order('id', { ascending: true })
+            .limit(1)
+            .maybeSingle();
+
+          // Simpan ke state untuk diteruskan ke ScoringForm
+          if (activePeriod) setActivePeriodId(activePeriod.id);
+          if (defaultExamType) setDefaultExamTypeId(defaultExamType.id);
+
+          let scoredStudentIds = new Set<number>();
+
+          if (activePeriod && defaultExamType) {
+            // FIX: Query scores difilter per periode aktif + exam_type (bukan semua periode)
+            const { data: scoresData } = await supabase
+              .from('scores')
+              .select('student_id')
+              .eq('period_id', activePeriod.id)
+              .eq('exam_type_id', defaultExamType.id);
+
+            scoredStudentIds = new Set(scoresData?.map(s => s.student_id) || []);
+          }
 
           const mapped: StudentWithStatus[] = studentsData.map(s => ({
             ...s,
@@ -67,6 +95,12 @@ export default function StudentList() {
   const total = students.length;
   const scored = students.filter(s => s.status === 'SUDAH').length;
   const progressPercentage = total === 0 ? 0 : Math.round((scored / total) * 100);
+
+  // Buat URL query string untuk ScoringForm
+  const scoringParams = new URLSearchParams();
+  if (activePeriodId) scoringParams.set('periodId', String(activePeriodId));
+  if (defaultExamTypeId) scoringParams.set('examTypeId', String(defaultExamTypeId));
+  const paramString = scoringParams.toString() ? `?${scoringParams.toString()}` : '';
 
   return (
     <div className="space-y-6">
@@ -100,7 +134,7 @@ export default function StudentList() {
           students.map((student) => (
             <button
               key={student.id}
-              onClick={() => navigate(`/examiner/class/${classId}/student/${student.id}`)}
+              onClick={() => navigate(`/examiner/class/${classId}/student/${student.id}${paramString}`)}
               className="w-full text-left p-4 active:bg-gray-50 transition-colors flex justify-between items-center group"
             >
               <div className="flex items-center gap-3">
