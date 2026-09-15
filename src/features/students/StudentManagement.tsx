@@ -3,6 +3,8 @@ import { Search, Plus, Upload, FileSpreadsheet, X, CheckCircle, AlertCircle, Loa
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
+import QRCode from 'qrcode';
+import jsPDF from 'jspdf';
 import type { Student, Class, Level } from '../../types';
 
 interface StudentData extends Student {
@@ -163,6 +165,82 @@ export default function StudentManagement() {
     XLSX.writeFile(wb, 'Data_Santri_MIQ.xlsx');
   };
 
+  const handleExportCards = async () => {
+    if (filteredStudents.length === 0) {
+      toast.error('Tidak ada santri untuk dicetak');
+      return;
+    }
+    
+    const toastId = toast.loading('Membuat PDF Kartu Ujian...');
+    try {
+      const doc = new jsPDF();
+      
+      const cardWidth = 85;
+      const cardHeight = 55;
+      const startX = 20;
+      const startY = 20;
+      const xMargin = 5;
+      const yMargin = 5;
+      
+      let currentX = startX;
+      let currentY = startY;
+      
+      for (let i = 0; i < filteredStudents.length; i++) {
+        const s = filteredStudents[i];
+        
+        // Cek halaman baru jika tidak muat (4 baris x 2 kolom)
+        if (i > 0 && i % 8 === 0) {
+          doc.addPage();
+          currentX = startX;
+          currentY = startY;
+        } else if (i > 0 && i % 2 === 0) {
+          currentX = startX;
+          currentY += cardHeight + yMargin;
+        } else if (i > 0) {
+          currentX += cardWidth + xMargin;
+        }
+        
+        // Gambar kotak kartu
+        doc.setDrawColor(0);
+        doc.setFillColor(255, 255, 255);
+        doc.roundedRect(currentX, currentY, cardWidth, cardHeight, 3, 3, 'FD');
+        
+        // Teks Kartu Ujian
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(4, 120, 87); // Primary green
+        doc.text('KARTU UJIAN MIQ', currentX + 5, currentY + 10);
+        
+        // Garis pemisah
+        doc.setDrawColor(4, 120, 87);
+        doc.setLineWidth(0.5);
+        doc.line(currentX + 5, currentY + 12, currentX + cardWidth - 5, currentY + 12);
+        
+        // Nama dan Kelas
+        doc.setFontSize(10);
+        doc.setTextColor(0);
+        doc.text(`Nama : ${s.full_name}`, currentX + 5, currentY + 22);
+        doc.text(`Kelas: ${s.class?.name || '-'}`, currentX + 5, currentY + 28);
+        doc.text(`Level: ${(s.class as any)?.level?.name || '-'}`, currentX + 5, currentY + 34);
+        
+        // Generate QR Code untuk student_id
+        const qrDataUrl = await QRCode.toDataURL(s.id.toString(), { margin: 1, width: 60 });
+        doc.addImage(qrDataUrl, 'PNG', currentX + cardWidth - 30, currentY + 20, 25, 25);
+        
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.text('Gunakan QR ini untuk', currentX + cardWidth - 32, currentY + 48);
+        doc.text('scan absensi ujian', currentX + cardWidth - 32, currentY + 51);
+      }
+      
+      doc.save(`Kartu_Ujian_MIQ.pdf`);
+      toast.success('Kartu ujian berhasil diunduh', { id: toastId });
+    } catch (error) {
+      console.error(error);
+      toast.error('Gagal membuat kartu ujian', { id: toastId });
+    }
+  };
+
   const handleSaveStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -297,6 +375,13 @@ export default function StudentManagement() {
             Import
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+          <button
+            onClick={handleExportCards}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            <FileDown size={18} className="text-red-600" />
+            Cetak Kartu Ujian
+          </button>
           <button 
             onClick={() => openStudentModal()}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
