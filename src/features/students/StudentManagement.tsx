@@ -12,7 +12,12 @@ interface StudentData extends Student {
 }
 
 interface ImportRow {
+  nis?: string;
   full_name: string;
+  gender?: string;
+  father_name?: string;
+  branch_code?: string;
+  branch_name?: string;
   class_name?: string;
   status?: string; // 'valid' | 'error'
   error?: string;
@@ -40,7 +45,17 @@ export default function StudentManagement() {
 
   // Single student form state
   const [showStudentModal, setShowStudentModal] = useState(false);
-  const [studentForm, setStudentForm] = useState({ id: 0, full_name: '', class_id: 0, active: true });
+  const [studentForm, setStudentForm] = useState({ 
+    id: 0, 
+    nis: '',
+    full_name: '', 
+    gender: 'L',
+    father_name: '',
+    branch_code: '',
+    branch_name: '',
+    class_id: 0, 
+    active: true 
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   const fetchData = async () => {
@@ -91,14 +106,30 @@ export default function StudentManagement() {
         const parsed: ImportRow[] = rows.map((row) => {
           const name = row['Nama'] || row['nama'] || row['full_name'] || '';
           const className = row['Kelas'] || row['kelas'] || row['class_name'] || '';
+          const nis = row['NIS'] || row['nis'] || '';
+          const gender = row['JK'] || row['jk'] || row['Jenis Kelamin'] || 'L';
+          const fatherName = row['Nama Ayah'] || row['nama_ayah'] || '';
+          const branchCode = row['Kode Ranting'] || row['kode_ranting'] || '';
+          const branchName = row['Nama Ranting'] || row['nama_ranting'] || '';
           
           if (!name.trim()) return { full_name: name, class_name: className, status: 'error', error: 'Nama kosong' };
+          if (!nis.toString().trim()) return { full_name: name, class_name: className, status: 'error', error: 'NIS kosong' };
           
           // Find matching class_id
           const foundClass = classes.find(c => c.name.toLowerCase() === className.toLowerCase());
           if (!foundClass) return { full_name: name, class_name: className, status: 'error', error: `Kelas "${className}" tidak ditemukan` };
           
-          return { full_name: name.trim(), class_name: className, class_id: foundClass.id, status: 'valid' };
+          return { 
+            full_name: name.trim(), 
+            nis: nis.toString().trim(),
+            gender: gender.toString().trim().toUpperCase(),
+            father_name: fatherName.toString().trim(),
+            branch_code: branchCode.toString().trim(),
+            branch_name: branchName.toString().trim(),
+            class_name: className, 
+            class_id: foundClass.id, 
+            status: 'valid' 
+          };
         });
 
         setImportRows(parsed);
@@ -119,7 +150,12 @@ export default function StudentManagement() {
     setImportLoading(true);
     try {
       const toInsert = validRows.map(r => ({
+        nis: r.nis,
         full_name: r.full_name,
+        gender: r.gender,
+        father_name: r.father_name,
+        branch_code: r.branch_code,
+        branch_name: r.branch_name,
         class_id: r.class_id,
         active: true,
       }));
@@ -142,8 +178,8 @@ export default function StudentManagement() {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { Nama: 'Ahmad Fulan', Kelas: 'A1' },
-      { Nama: 'Siti Aisyah', Kelas: 'B2' }
+      { NIS: '12345', Nama: 'Ahmad Fulan', JK: 'L', 'Nama Ayah': 'Budi', 'Kode Ranting': 'R01', 'Nama Ranting': 'Ranting Pusat', Kelas: 'A1' },
+      { NIS: '12346', Nama: 'Siti Aisyah', JK: 'P', 'Nama Ayah': 'Anto', 'Kode Ranting': 'R01', 'Nama Ranting': 'Ranting Pusat', Kelas: 'B2' }
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
@@ -152,7 +188,12 @@ export default function StudentManagement() {
 
   const handleExportData = () => {
     const exportData = filteredStudents.map(s => ({
+      'NIS': s.nis || '-',
       'Nama Santri': s.full_name,
+      'L/P': s.gender || '-',
+      'Nama Ayah': s.father_name || '-',
+      'Kode Ranting': s.branch_code || '-',
+      'Nama Ranting': s.branch_name || '-',
       'Kelas': s.class?.name || '-',
       'Tingkatan': (s.class as any)?.level?.name || '-',
       'Status': s.active ? 'Aktif' : 'Nonaktif'
@@ -207,7 +248,7 @@ export default function StudentManagement() {
         doc.roundedRect(currentX, currentY, cardWidth, cardHeight, 3, 3, 'FD');
         
         // Teks Kartu Ujian
-        doc.setFontSize(14);
+        doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(4, 120, 87); // Primary green
         doc.text('KARTU UJIAN MIQ', currentX + 5, currentY + 10);
@@ -218,20 +259,21 @@ export default function StudentManagement() {
         doc.line(currentX + 5, currentY + 12, currentX + cardWidth - 5, currentY + 12);
         
         // Nama dan Kelas
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setTextColor(0);
-        doc.text(`Nama : ${s.full_name}`, currentX + 5, currentY + 22);
-        doc.text(`Kelas: ${s.class?.name || '-'}`, currentX + 5, currentY + 28);
-        doc.text(`Level: ${(s.class as any)?.level?.name || '-'}`, currentX + 5, currentY + 34);
+        doc.text(`Nama : ${s.full_name.length > 20 ? s.full_name.substring(0,20)+'...' : s.full_name}`, currentX + 5, currentY + 20);
+        doc.text(`NIS  : ${s.nis || '-'}`, currentX + 5, currentY + 26);
+        doc.text(`Kelas: ${s.class?.name || '-'}`, currentX + 5, currentY + 32);
+        doc.text(`Rtg  : ${s.branch_name || '-'}`, currentX + 5, currentY + 38);
         
-        // Generate QR Code untuk student_id
-        const qrDataUrl = await QRCode.toDataURL(s.id.toString(), { margin: 1, width: 60 });
-        doc.addImage(qrDataUrl, 'PNG', currentX + cardWidth - 30, currentY + 20, 25, 25);
+        // Generate QR Code untuk student nis (atau fallback id)
+        const qrDataUrl = await QRCode.toDataURL(s.nis || s.id.toString(), { margin: 1, width: 60 });
+        doc.addImage(qrDataUrl, 'PNG', currentX + cardWidth - 30, currentY + 15, 25, 25);
         
-        doc.setFontSize(8);
+        doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
-        doc.text('Gunakan QR ini untuk', currentX + cardWidth - 32, currentY + 48);
-        doc.text('scan absensi ujian', currentX + cardWidth - 32, currentY + 51);
+        doc.text('Gunakan QR ini untuk', currentX + cardWidth - 32, currentY + 44);
+        doc.text('scan absensi ujian', currentX + cardWidth - 32, currentY + 48);
       }
       
       doc.save(`Kartu_Ujian_MIQ.pdf`);

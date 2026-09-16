@@ -34,7 +34,12 @@ export interface Class {
 export interface Student {
   id: number;
   class_id: number;
+  nis: string | null;
   full_name: string;
+  gender: string | null;
+  father_name: string | null;
+  branch_code: string | null;
+  branch_name: string | null;
   active: boolean;
   created_at: string;
   
