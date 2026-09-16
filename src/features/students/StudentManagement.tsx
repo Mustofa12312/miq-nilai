@@ -291,7 +291,12 @@ export default function StudentManagement() {
       if (studentForm.id === 0) {
         // Create
         const { error } = await supabase.from('students').insert({
+          nis: studentForm.nis,
           full_name: studentForm.full_name,
+          gender: studentForm.gender,
+          father_name: studentForm.father_name,
+          branch_code: studentForm.branch_code,
+          branch_name: studentForm.branch_name,
           class_id: studentForm.class_id,
           active: studentForm.active
         });
@@ -299,7 +304,12 @@ export default function StudentManagement() {
       } else {
         // Update
         const { error } = await supabase.from('students').update({
+          nis: studentForm.nis,
           full_name: studentForm.full_name,
+          gender: studentForm.gender,
+          father_name: studentForm.father_name,
+          branch_code: studentForm.branch_code,
+          branch_name: studentForm.branch_name,
           class_id: studentForm.class_id,
           active: studentForm.active
         }).eq('id', studentForm.id);
@@ -319,14 +329,24 @@ export default function StudentManagement() {
     if (student) {
       setStudentForm({
         id: student.id,
+        nis: student.nis || '',
         full_name: student.full_name,
+        gender: student.gender || 'L',
+        father_name: student.father_name || '',
+        branch_code: student.branch_code || '',
+        branch_name: student.branch_name || '',
         class_id: student.class_id,
         active: student.active
       });
     } else {
       setStudentForm({
         id: 0,
+        nis: '',
         full_name: '',
+        gender: 'L',
+        father_name: '',
+        branch_code: '',
+        branch_name: '',
         class_id: classes.length > 0 ? classes[0].id : 0,
         active: true
       });
@@ -380,6 +400,8 @@ export default function StudentManagement() {
 
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (s.nis || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (s.branch_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
     
     const studentLevelId = (s.class as any)?.level?.id?.toString() || '';
@@ -477,22 +499,32 @@ export default function StudentManagement() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-sm text-gray-500 uppercase tracking-wider">
+                <th className="p-4 font-medium">NIS</th>
                 <th className="p-4 font-medium">Nama Santri</th>
+                <th className="p-4 font-medium">L/P</th>
+                <th className="p-4 font-medium">Ranting</th>
                 <th className="p-4 font-medium">Kelas</th>
-                <th className="p-4 font-medium">Tingkatan</th>
                 <th className="p-4 font-medium">Status</th>
                 <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
-                <tr><td colSpan={5} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
               ) : filteredStudents.length > 0 ? (
                 filteredStudents.map((student) => (
                   <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4 font-medium text-gray-900">{student.full_name}</td>
-                    <td className="p-4 text-gray-600">{student.class?.name || '-'}</td>
-                    <td className="p-4 text-gray-600">{(student.class as any)?.level?.name || '-'}</td>
+                    <td className="p-4 text-gray-600">{student.nis || '-'}</td>
+                    <td className="p-4 font-medium text-gray-900">
+                      <div>{student.full_name}</div>
+                      {student.father_name && <div className="text-xs text-gray-500 font-normal mt-0.5">Ayah: {student.father_name}</div>}
+                    </td>
+                    <td className="p-4 text-gray-600">{student.gender || '-'}</td>
+                    <td className="p-4 text-gray-600">{student.branch_name || '-'}</td>
+                    <td className="p-4 text-gray-600">
+                      <div>{student.class?.name || '-'}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">{(student.class as any)?.level?.name || '-'}</div>
+                    </td>
                     <td className="p-4">
                       {student.active ? (
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aktif</span>
@@ -521,7 +553,7 @@ export default function StudentManagement() {
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={5} className="p-8 text-center text-gray-500">Tidak ada santri yang ditemukan.</td></tr>
+                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Tidak ada santri yang ditemukan.</td></tr>
               )}
             </tbody>
           </table>
@@ -623,32 +655,93 @@ export default function StudentManagement() {
                 <X size={20} />
               </button>
             </div>
-            <form onSubmit={handleSaveStudent} className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
-                <input 
-                  type="text" required 
-                  placeholder="Masukkan nama santri"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  value={studentForm.full_name}
-                  onChange={(e) => setStudentForm(p => ({ ...p, full_name: e.target.value }))}
-                />
+            <form onSubmit={handleSaveStudent} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
+                  <input 
+                    type="text" required 
+                    placeholder="Masukkan nama santri"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.full_name}
+                    onChange={(e) => setStudentForm(p => ({ ...p, full_name: e.target.value }))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">NIS</label>
+                  <input 
+                    type="text" required 
+                    placeholder="Nomor Induk Santri"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.nis}
+                    onChange={(e) => setStudentForm(p => ({ ...p, nis: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
+                  <select 
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.gender}
+                    onChange={(e) => setStudentForm(p => ({ ...p, gender: e.target.value }))}
+                  >
+                    <option value="L">Laki-laki (L)</option>
+                    <option value="P">Perempuan (P)</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Ayah</label>
+                  <input 
+                    type="text"
+                    placeholder="Nama ayah santri (Opsional)"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.father_name}
+                    onChange={(e) => setStudentForm(p => ({ ...p, father_name: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kode Ranting</label>
+                  <input 
+                    type="text"
+                    placeholder="Misal: R01"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.branch_code}
+                    onChange={(e) => setStudentForm(p => ({ ...p, branch_code: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Ranting</label>
+                  <input 
+                    type="text"
+                    placeholder="Misal: Ranting Pusat"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.branch_name}
+                    onChange={(e) => setStudentForm(p => ({ ...p, branch_name: e.target.value }))}
+                  />
+                </div>
+
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
+                  <select 
+                    required
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    value={studentForm.class_id}
+                    onChange={(e) => setStudentForm(p => ({ ...p, class_id: parseInt(e.target.value) }))}
+                  >
+                    <option value={0} disabled>Pilih Kelas</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name} ({(c as any).level?.name || 'Tanpa Tingkat'})</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-                <select 
-                  required
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                  value={studentForm.class_id}
-                  onChange={(e) => setStudentForm(p => ({ ...p, class_id: parseInt(e.target.value) }))}
-                >
-                  <option value={0} disabled>Pilih Kelas</option>
-                  {classes.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} ({(c as any).level?.name || 'Tanpa Tingkat'})</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2 mt-2">
+
+              <div className="flex items-center gap-2 mt-4">
                 <input 
                   type="checkbox" 
                   id="active-status"
