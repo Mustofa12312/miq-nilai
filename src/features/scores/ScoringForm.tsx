@@ -118,23 +118,13 @@ export default function ScoringForm() {
         
       if (sessionErr) throw sessionErr;
 
-      // Hitung grade berbasis persentase
-      const maxPossibleScore = criteriaList.reduce((sum, c) => sum + c.default_score, 0);
-      const percentage = maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * 100 : 0;
-      const grade = percentage >= 90 ? 'Mumtaz'
-        : percentage >= 80 ? 'Jayyid Jiddan'
-        : percentage >= 70 ? 'Jayyid'
-        : percentage >= 60 ? 'Maqbul'
-        : 'I\'adah';
-
-      // 3. Create score — FIX: sertakan period_id dan exam_type_id sesuai BR-001
+      // 3. Create score — FIX: period_id dan exam_type_id disertakan, tetapi total_score & grade tidak dikirim. 
+      // Akan dihitung otomatis oleh Trigger Database setelah score_details di-insert.
       const { data: scoreRec, error: scoreErr } = await supabase
         .from('scores')
-        .insert({
+        .upsert({
           session_id: session.id,
           student_id: parseInt(studentId),
-          total_score: totalScore,
-          grade,
           period_id: periodId,
           exam_type_id: examTypeId,
         })
@@ -164,7 +154,14 @@ export default function ScoringForm() {
         if (detailErr) throw detailErr;
       }
 
-      toast.success(`Nilai berhasil disimpan! Total: ${totalScore} (${grade})`);
+      // Ambil score hasil hitungan database (dari trigger)
+      const { data: finalScoreRec } = await supabase
+        .from('scores')
+        .select('total_score, grade')
+        .eq('id', scoreRec.id)
+        .single();
+
+      toast.success(`Nilai berhasil disimpan! Total: ${finalScoreRec?.total_score || totalScore} (${finalScoreRec?.grade || '...'})`);
       navigate(-1);
 
     } catch (err: any) {

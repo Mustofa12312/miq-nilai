@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { Plus, Loader2, Edit2, Trash2, X, Save } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Loader2, Edit2, Trash2, X, Save, Upload, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import type { Class, Level } from '../../types';
@@ -23,6 +24,16 @@ export default function ClassManagement() {
   const [classForm, setClassForm] = useState({ id: 0, name: '', level_id: 0 });
   
   const [isSaving, setIsSaving] = useState(false);
+
+  // Export & Import state
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  
+  // Delete All state
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -171,6 +182,112 @@ export default function ClassManagement() {
     setShowClassModal(true);
   };
 
+  const handleExportData = () => {
+    const exportData = classes.map(c => ({
+      'Nama Kelas': c.name,
+      'Tingkatan': c.level?.name || '-',
+      'Jumlah Santri': c.student_count || 0
+    }));
+    
+    if (exportData.length === 0) return;
+    
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data Kelas');
+    XLSX.writeFile(wb, 'Data_Kelas.xlsx');
+  };
+
+  const handleDownloadTemplate = () => {
+    const ws = XLSX.utils.json_to_sheet([
+      { 'Nama Kelas': 'A1', 'Tingkatan': 'Al Quran I' },
+      { 'Nama Kelas': 'B2', 'Tingkatan': 'Al Quran II' }
+    ]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    XLSX.writeFile(wb, 'Template_Import_Kelas.xlsx');
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+        
+        const parsedRows = data.map((row: any) => {
+          const levelName = row['Tingkatan'] || '';
+          const matchedLvl = levels.find(l => l.name.toLowerCase() === levelName.toLowerCase());
+          return {
+            name: row['Nama Kelas'] || '',
+            level_name: levelName,
+            level_id: matchedLvl?.id || 0,
+            status: matchedLvl ? 'valid' : 'error'
+          };
+        });
+        
+        setImportRows(parsedRows);
+        setShowImportModal(true);
+      } catch (err) {
+        toast.error('Gagal membaca file excel');
+      }
+    };
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const handleImport = async () => {
+    const validRows = importRows.filter(r => r.status === 'valid');
+    if (validRows.length === 0) return;
+    
+    setImportLoading(true);
+    try {
+      const toInsert = validRows.map(r => ({
+        name: r.name,
+        level_id: r.level_id
+      }));
+      
+      const { error } = await supabase.from('classes').insert(toInsert);
+      if (error) throw error;
+      
+      toast.success('Berhasil mengimpor kelas');
+      setShowImportModal(false);
+      fetchData();
+    } catch (err: any) {
+      toast.error('Gagal impor: ' + err.message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      // Sesuai dengan "menyesuaikan dengan data santri"
+      // Hapus seluruh dependensi agar tabel kelas dapat dibersihkan
+      await supabase.from('score_details').delete().neq('id', 0);
+      await supabase.from('scores').delete().neq('id', 0);
+      await supabase.from('students').delete().neq('id', 0);
+      
+      const { error } = await supabase.from('classes').delete().neq('id', 0);
+      if (error) throw error;
+      
+      toast.success('Berhasil menghapus seluruh data kelas beserta data santri.');
+      setShowDeleteAllModal(false);
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Gagal menghapus: ' + err.message);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   return (
     <div className="space-y-6 pb-10">
       {/* Header */}
@@ -179,7 +296,31 @@ export default function ClassManagement() {
           <h2 className="text-2xl font-bold text-gray-900">Manajemen Kelas & Tingkat</h2>
           <p className="text-gray-500">Atur pembagian kelas berdasarkan tingkatan Al-Qur'an.</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={handleExportData}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            <Download size={18} />
+            Export
+          </button>
+          <button
+            onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            <Upload size={18} />
+            Import
+          </button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+          
+          <button
+            onClick={() => setShowDeleteAllModal(true)}
+            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 font-medium transition-colors"
+          >
+            <Trash2 size={18} />
+            Hapus Semua
+          </button>
+
           <button 
             onClick={() => openClassModal()}
             className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
@@ -356,6 +497,107 @@ export default function ClassManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hapus Semua */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Seluruh Kelas?</h3>
+              <p className="text-gray-500 mb-6">
+                Anda yakin ingin menghapus <strong>seluruh data kelas</strong>? Tindakan ini juga akan <strong>menghapus seluruh santri dan nilai</strong> yang menggunakan kelas-kelas ini secara permanen.
+              </p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteAllModal(false)}
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleDeleteAll}
+                  disabled={isDeletingAll}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {isDeletingAll ? <Loader2 size={18} className="animate-spin" /> : 'Ya, Hapus Semua'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Import */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h3 className="font-bold text-gray-900 text-lg">Review Import Data Kelas</h3>
+              <button onClick={() => setShowImportModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-5 overflow-y-auto flex-1">
+              <div className="flex justify-between items-center mb-4">
+                <p className="text-sm text-gray-600">
+                  Ditemukan {importRows.length} baris data. 
+                  <span className="text-emerald-600 font-medium ml-2">{importRows.filter(r => r.status === 'valid').length} valid</span>,
+                  <span className="text-red-600 font-medium ml-2">{importRows.filter(r => r.status === 'error').length} bermasalah</span>
+                </p>
+                <button onClick={handleDownloadTemplate} className="text-sm text-primary hover:underline font-medium">Download Template Excel</button>
+              </div>
+
+              <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-50 border-b border-gray-200 text-gray-600">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Nama Kelas</th>
+                      <th className="px-4 py-3 font-medium">Tingkatan</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {importRows.map((row, i) => (
+                      <tr key={i} className={row.status === 'error' ? 'bg-red-50' : 'bg-white'}>
+                        <td className="px-4 py-3">
+                          {row.status === 'valid' ? 
+                            <span className="text-xs font-medium text-emerald-700 bg-emerald-100 px-2 py-1 rounded-full">Valid</span> : 
+                            <span className="text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded-full">Error: Tingkatan Tidak Ditemukan</span>
+                          }
+                        </td>
+                        <td className="px-4 py-3 font-medium text-gray-900">{row.name}</td>
+                        <td className="px-4 py-3 text-gray-600">{row.level_name}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-5 border-t border-gray-100 bg-gray-50 flex gap-3 justify-end">
+              <button 
+                onClick={() => setShowImportModal(false)}
+                className="px-5 py-2.5 bg-white border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+              >
+                Batal
+              </button>
+              <button 
+                onClick={handleImport}
+                disabled={importLoading || importRows.filter(r => r.status === 'valid').length === 0}
+                className="px-5 py-2.5 bg-primary text-white rounded-lg font-medium hover:bg-emerald-600 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {importLoading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                Import {importRows.filter(r => r.status === 'valid').length} Data
+              </button>
+            </div>
           </div>
         </div>
       )}

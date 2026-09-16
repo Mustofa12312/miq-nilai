@@ -37,6 +37,8 @@ export default function StudentManagement() {
   
   // Import state
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importLoading, setImportLoading] = useState(false);
   const [importDone, setImportDone] = useState(false);
@@ -398,6 +400,28 @@ export default function StudentManagement() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      // Langkah 1: Hapus semua detail nilai
+      await supabase.from('score_details').delete().neq('id', 0);
+      // Langkah 2: Hapus semua nilai
+      await supabase.from('scores').delete().neq('id', 0);
+      // Langkah 3: Hapus semua santri
+      const { error } = await supabase.from('students').delete().neq('id', 0);
+      if (error) throw error;
+      
+      toast.success('Berhasil menghapus seluruh data santri dan nilainya.');
+      setShowDeleteAllModal(false);
+      fetchData();
+    } catch (err: any) {
+      console.error('Delete all error:', err);
+      toast.error(`Gagal menghapus data: ${err.message}`);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           (s.nis || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -440,6 +464,13 @@ export default function StudentManagement() {
             Import
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+          <button
+            onClick={() => setShowDeleteAllModal(true)}
+            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 font-medium transition-colors"
+          >
+            <Trash2 size={18} />
+            Hapus Semua
+          </button>
           <button
             onClick={handleExportCards}
             className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
@@ -763,6 +794,40 @@ export default function StudentManagement() {
           </div>
         </div>
       )}
+
+      {/* Modal Hapus Semua */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Seluruh Santri?</h3>
+              <p className="text-gray-500 mb-6">
+                Anda yakin ingin menghapus <strong>seluruh data santri</strong>? Tindakan ini tidak dapat dibatalkan dan akan <strong>menghapus semua nilai</strong> yang terkait.
+              </p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteAllModal(false)}
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleDeleteAll}
+                  disabled={isDeletingAll}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {isDeletingAll ? <Loader2 size={18} className="animate-spin" /> : 'Ya, Hapus Semua'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
