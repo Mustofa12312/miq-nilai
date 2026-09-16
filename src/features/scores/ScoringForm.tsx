@@ -87,6 +87,18 @@ export default function ScoringForm() {
         examTypeId = defaultExamType.id;
       }
 
+      const { data: assignment } = await supabase
+        .from('examiner_assignments')
+        .select('id')
+        .eq('examiner_id', user.id)
+        .eq('class_id', parseInt(classId))
+        .eq('period_id', periodId)
+        .maybeSingle();
+
+      if (!assignment) {
+        throw new Error("Anda tidak ditugaskan menilai kelas ini pada periode ujian yang dipilih.");
+      }
+
       // FIX: Cek BR-001 — apakah santri sudah punya nilai di periode + jenis ujian ini?
       const { data: existingScore } = await supabase
         .from('scores')

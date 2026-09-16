@@ -19,6 +19,8 @@ export default function ExaminerDashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!profile?.id) return;
+
       try {
         // 1. Fetch active exam period
         const { data: periodData } = await supabase
@@ -29,20 +31,32 @@ export default function ExaminerDashboard() {
           
         if (periodData) {
           setActivePeriod(periodData);
+        } else {
+          setClasses([]);
+          return;
         }
         
-        // 2. Fetch all classes
-        const { data: classData, error } = await supabase
-          .from('classes')
+        // 2. Fetch assigned classes only
+        const { data: assignmentData, error } = await supabase
+          .from('examiner_assignments')
           .select(`
-            *,
-            level:levels(*)
+            class:classes (
+              *,
+              level:levels(*)
+            )
           `)
-          .order('level_id')
-          .order('name'); 
+          .eq('examiner_id', profile.id)
+          .eq('period_id', periodData.id);
 
-        if (!error && classData) {
-          setClasses(classData as any);
+        if (!error && assignmentData) {
+          const assignedClasses = assignmentData
+            .map((assignment: any) => assignment.class)
+            .filter(Boolean)
+            .sort((a: ClassWithLevel, b: ClassWithLevel) => {
+              const levelSort = (a.level?.sort_order ?? 0) - (b.level?.sort_order ?? 0);
+              return levelSort || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+            });
+          setClasses(assignedClasses);
         }
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
@@ -52,7 +66,7 @@ export default function ExaminerDashboard() {
     };
 
     fetchData();
-  }, []);
+  }, [profile?.id]);
 
   const filteredClasses = classes.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -93,7 +107,7 @@ export default function ExaminerDashboard() {
         
         {Object.keys(groupedClasses).length === 0 ? (
           <div className="text-center p-8 bg-white rounded-xl border border-dashed border-gray-300">
-            <p className="text-gray-500">Tidak ada kelas yang ditemukan.</p>
+            <p className="text-gray-500">Tidak ada kelas yang ditugaskan untuk periode aktif.</p>
           </div>
         ) : (
           <div className="space-y-6">

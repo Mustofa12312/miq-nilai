@@ -77,6 +77,8 @@ export interface Score {
   id: number;
   session_id: number;
   student_id: number;
+  period_id: number;
+  exam_type_id: number;
   total_score: number;
   grade: string | null;
   notes: string | null;

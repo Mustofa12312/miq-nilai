@@ -11,12 +11,6 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ allowedRoles }) 
   const { user, profile, loading } = useAuth();
   const location = useLocation();
 
-  // BYPASS FOR TESTING UI (If Supabase is not configured)
-  const isTesting = !import.meta.env.VITE_SUPABASE_URL;
-  if (isTesting) {
-    return <Outlet />;
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">

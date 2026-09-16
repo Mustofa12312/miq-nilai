@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Student, Class } from '../../types';
 
 interface StudentWithStatus extends Student {
@@ -11,6 +12,7 @@ interface StudentWithStatus extends Student {
 export default function StudentList() {
   const navigate = useNavigate();
   const { classId } = useParams();
+  const { user } = useAuth();
 
   const [classInfo, setClassInfo] = useState<Class | null>(null);
   const [students, setStudents] = useState<StudentWithStatus[]>([]);
@@ -21,7 +23,7 @@ export default function StudentList() {
 
   useEffect(() => {
     const fetchStudents = async () => {
-      if (!classId) return;
+      if (!classId || !user?.id) return;
       try {
         // Fetch class info
         const { data: cls } = await supabase
@@ -40,24 +42,38 @@ export default function StudentList() {
           .order('id', { ascending: true });
 
         if (studentsData) {
-          // FIX: Filter scores berdasarkan periode AKTIF saja (bukan semua periode)
-          // Ambil periode aktif dulu
           const { data: activePeriod } = await supabase
             .from('exam_periods')
             .select('id')
             .eq('active', true)
             .maybeSingle();
 
-          // Ambil exam_type aktif
           const { data: defaultExamType } = await supabase
             .from('exam_types')
             .select('id')
             .eq('active', true)
             .maybeSingle();
 
-          // Simpan ke state untuk diteruskan ke ScoringForm
           if (activePeriod) setActivePeriodId(activePeriod.id);
           if (defaultExamType) setDefaultExamTypeId(defaultExamType.id);
+
+          if (!activePeriod) {
+            setStudents([]);
+            return;
+          }
+
+          const { data: assignment } = await supabase
+            .from('examiner_assignments')
+            .select('id')
+            .eq('examiner_id', user.id)
+            .eq('class_id', Number(classId))
+            .eq('period_id', activePeriod.id)
+            .maybeSingle();
+
+          if (!assignment) {
+            setStudents([]);
+            return;
+          }
 
           let scoredStudentIds = new Set<number>();
 

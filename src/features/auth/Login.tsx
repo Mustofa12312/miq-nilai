@@ -130,26 +130,6 @@ export default function Login() {
           )}
         </button>
       </form>
-      
-      {!import.meta.env.VITE_SUPABASE_URL && (
-        <div className="mt-10 pt-6 border-t border-gray-100">
-          <p className="text-xs font-semibold text-amber-600/80 mb-4 text-center tracking-wide uppercase">Mode Testing (Tanpa DB)</p>
-          <div className="flex gap-3">
-            <button
-              onClick={() => navigate('/admin')}
-              className="flex-1 bg-white border border-gray-200 hover:border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold py-2.5 rounded-xl transition-all shadow-sm"
-            >
-              Mode Admin
-            </button>
-            <button
-              onClick={() => navigate('/examiner')}
-              className="flex-1 bg-teal-50 border border-teal-100 hover:bg-teal-100 text-teal-700 text-sm font-semibold py-2.5 rounded-xl transition-all shadow-sm"
-            >
-              Mode Penguji
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
