@@ -104,6 +104,7 @@ export default function StudentManagement() {
         setImportRows(parsed);
         setShowImportModal(true);
       } catch (err) {
+        console.error('Import error:', err);
         setImportError('Gagal membaca file. Pastikan format Excel (.xlsx) atau CSV.');
       }
     };

@@ -45,6 +45,7 @@ export default function ScoreVerification() {
       setScores([]);
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPeriod, selectedClass, selectedExamType]);
 
   const fetchFilters = async () => {
