@@ -79,10 +79,10 @@ export default function ScoringForm() {
         }
       }
 
-      // FIX: Resolve exam_type_id: pakai dari URL jika ada, fallback ke pertama di DB
+      // FIX: Resolve exam_type_id: pakai dari URL jika ada, fallback ke ujian aktif
       let examTypeId = urlExamTypeId;
       if (!examTypeId) {
-        const { data: defaultExamType } = await supabase.from('exam_types').select('id').order('id', { ascending: true }).limit(1).maybeSingle();
+        const { data: defaultExamType } = await supabase.from('exam_types').select('id').eq('active', true).maybeSingle();
         if (!defaultExamType) throw new Error("Tidak ada data jenis ujian di database. Harap tambahkan jenis ujian di menu Admin.");
         examTypeId = defaultExamType.id;
       }

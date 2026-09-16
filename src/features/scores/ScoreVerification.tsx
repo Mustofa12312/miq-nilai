@@ -70,7 +70,12 @@ export default function ScoreVerification() {
       
       if (examTypesRes.data) {
         setExamTypes(examTypesRes.data);
-        if (examTypesRes.data.length > 0) setSelectedExamType(examTypesRes.data[0].id);
+        const activeEt = examTypesRes.data.find(et => et.active);
+        if (activeEt) {
+          setSelectedExamType(activeEt.id);
+        } else if (examTypesRes.data.length > 0) {
+          setSelectedExamType(examTypesRes.data[0].id);
+        }
       }
     } catch (error) {
       console.error('Error fetching filters:', error);

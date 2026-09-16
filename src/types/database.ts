@@ -11,6 +11,7 @@ export interface ExamPeriod {
 export interface ExamType {
   id: number;
   name: string;
+  active: boolean;
 }
 
 export interface Level {

@@ -48,12 +48,11 @@ export default function StudentList() {
             .eq('active', true)
             .maybeSingle();
 
-          // Ambil exam_type default (pertama yang ada di DB, biasanya "Ujian Al-Quran")
+          // Ambil exam_type aktif
           const { data: defaultExamType } = await supabase
             .from('exam_types')
             .select('id')
-            .order('id', { ascending: true })
-            .limit(1)
+            .eq('active', true)
             .maybeSingle();
 
           // Simpan ke state untuk diteruskan ke ScoringForm

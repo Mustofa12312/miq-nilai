@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Settings, X, Loader2, Save, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
-import type { ExamPeriod } from '../../types';
+import type { ExamPeriod, ExamType } from '../../types';
 
 interface Criteria {
   id: number;
@@ -16,31 +16,37 @@ interface Criteria {
 
 export default function ExamManagement() {
   const [periods, setPeriods] = useState<ExamPeriod[]>([]);
+  const [examTypes, setExamTypes] = useState<ExamType[]>([]);
   const [criteria, setCriteria] = useState<Criteria[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Modals state
   const [showPeriodModal, setShowPeriodModal] = useState(false);
+  const [showExamTypeModal, setShowExamTypeModal] = useState(false);
   const [showCriteriaModal, setShowCriteriaModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Edit state
   const [editPeriodId, setEditPeriodId] = useState<number | null>(null);
+  const [editExamTypeId, setEditExamTypeId] = useState<number | null>(null);
   const [editCriteriaId, setEditCriteriaId] = useState<number | null>(null);
 
   // Form state
   const [periodForm, setPeriodForm] = useState({ name: '', start_date: '', end_date: '', active: true });
+  const [examTypeForm, setExamTypeForm] = useState({ name: '', active: false });
   const [criteriaForm, setCriteriaForm] = useState({ category: 'TAJWID', name: '', default_score: 100, deduction: 1, sort_order: 1 });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [periodsRes, criteriaRes] = await Promise.all([
+      const [periodsRes, examTypesRes, criteriaRes] = await Promise.all([
         supabase.from('exam_periods').select('*').order('start_date', { ascending: false }),
+        supabase.from('exam_types').select('*').order('id', { ascending: true }),
         supabase.from('criteria').select('*').order('sort_order')
       ]);
 
       if (periodsRes.data) setPeriods(periodsRes.data);
+      if (examTypesRes.data) setExamTypes(examTypesRes.data);
       if (criteriaRes.data) setCriteria(criteriaRes.data);
     } catch (error) {
       console.error(error);
@@ -93,6 +99,75 @@ export default function ExamManagement() {
       console.error(error);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // --- EXAM TYPE HANDLERS ---
+  const handleOpenAddExamType = () => {
+    setEditExamTypeId(null);
+    setExamTypeForm({ name: '', active: false });
+    setShowExamTypeModal(true);
+  };
+
+  const handleOpenEditExamType = (et: ExamType) => {
+    setEditExamTypeId(et.id);
+    setExamTypeForm({ name: et.name, active: et.active });
+    setShowExamTypeModal(true);
+  };
+
+  const handleDeleteExamType = async (id: number) => {
+    if (!window.confirm('Yakin ingin menghapus jenis ujian ini?')) return;
+    try {
+      await supabase.from('exam_types').delete().eq('id', id);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Gagal menghapus jenis ujian. Mungkin ada data nilai yang terikat.');
+    }
+  };
+
+  const handleSaveExamType = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    try {
+      if (examTypeForm.active) {
+        // Matikan active yang lain jika yang baru ini diset active
+        await supabase.from('exam_types').update({ active: false }).neq('id', editExamTypeId || 0);
+      }
+
+      if (editExamTypeId) {
+        await supabase.from('exam_types').update(examTypeForm).eq('id', editExamTypeId);
+      } else {
+        await supabase.from('exam_types').insert([examTypeForm]);
+      }
+      toast.success('Jenis ujian berhasil disimpan');
+      setShowExamTypeModal(false);
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Terjadi kesalahan saat menyimpan jenis ujian.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleExamTypeActive = async (id: number, currentActive: boolean) => {
+    if (currentActive) return; // if already active, do nothing
+    
+    // Konfirmasi karena memindah ujian yang aktif
+    if (!window.confirm('Mengaktifkan ujian ini akan mengubah semua form penguji di aplikasi mobile ke ujian ini. Lanjutkan?')) return;
+
+    try {
+      // Nonaktifkan semua yang lain
+      await supabase.from('exam_types').update({ active: false }).neq('id', 0);
+      // Aktifkan yang dipilih
+      await supabase.from('exam_types').update({ active: true }).eq('id', id);
+      
+      toast.success('Jenis ujian yang aktif berhasil diubah.');
+      fetchData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Terjadi kesalahan.');
     }
   };
 
@@ -161,7 +236,57 @@ export default function ExamManagement() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Exam Periods */}
+        <div className="space-y-6">
+          {/* Exam Types */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-fit">
+            <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-gray-900">Jenis Ujian</h3>
+                <p className="text-xs text-gray-500 font-normal">Hanya ujian berstatus "Aktif" yang muncul di aplikasi Penguji</p>
+              </div>
+              <button 
+                onClick={handleOpenAddExamType}
+                className="flex items-center gap-1 text-primary hover:text-emerald-700 text-sm font-medium"
+              >
+                <Plus size={16} /> Tambah
+              </button>
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {examTypes.map(et => (
+                <li key={et.id} className="p-4 hover:bg-gray-50 flex justify-between items-center group">
+                  <div>
+                    <p className="font-medium text-gray-900">{et.name}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => handleToggleExamTypeActive(et.id, et.active)}
+                      className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${
+                        et.active 
+                          ? 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200' 
+                          : 'bg-white text-gray-500 border-gray-300 hover:bg-gray-100'
+                      }`}
+                      title={et.active ? 'Ujian ini sedang aktif' : 'Klik untuk mengaktifkan ujian ini'}
+                    >
+                      {et.active ? 'Aktif' : 'Set Aktif'}
+                    </button>
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button onClick={() => handleOpenEditExamType(et)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md">
+                        <Edit2 size={16} />
+                      </button>
+                      <button onClick={() => handleDeleteExamType(et.id)} className="p-1.5 text-red-600 hover:bg-red-50 rounded-md">
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+              {examTypes.length === 0 && (
+                <li className="p-4 text-center text-gray-500">Belum ada jenis ujian.</li>
+              )}
+            </ul>
+          </div>
+
+          {/* Exam Periods */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden h-fit">
           <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
             <h3 className="font-bold text-gray-900">Periode Ujian</h3>
@@ -198,6 +323,7 @@ export default function ExamManagement() {
               <li className="p-4 text-center text-gray-500">Belum ada periode ujian.</li>
             )}
           </ul>
+        </div>
         </div>
 
         {/* Criteria */}
@@ -285,6 +411,54 @@ export default function ExamManagement() {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Modal Tambah/Edit Exam Type */}
+      {showExamTypeModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex justify-between items-center p-6 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">
+                {editExamTypeId ? 'Edit Jenis Ujian' : 'Tambah Jenis Ujian'}
+              </h3>
+              <button onClick={() => setShowExamTypeModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+            <form onSubmit={handleSaveExamType} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nama Ujian</label>
+                <input 
+                  type="text" required 
+                  placeholder="Misal: Ujian 1"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                  value={examTypeForm.name}
+                  onChange={(e) => setExamTypeForm(p => ({ ...p, name: e.target.value }))}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 mt-2">
+                <input 
+                  type="checkbox" 
+                  id="exam-type-active"
+                  className="w-4 h-4 text-primary rounded focus:ring-primary"
+                  checked={examTypeForm.active}
+                  onChange={(e) => setExamTypeForm(p => ({ ...p, active: e.target.checked }))}
+                />
+                <label htmlFor="exam-type-active" className="text-sm font-medium text-gray-700">Set sebagai Ujian Aktif</label>
+              </div>
+
+              <div className="flex gap-3 pt-4 mt-6 border-t border-gray-100">
+                <button type="button" onClick={() => setShowExamTypeModal(false)} className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50">
+                  Batal
+                </button>
+                <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-emerald-600 flex items-center justify-center gap-2">
+                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : <><Save size={18} /> Simpan</>}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
