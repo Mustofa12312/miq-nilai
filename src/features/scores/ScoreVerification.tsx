@@ -12,6 +12,7 @@ interface ScoreVerificationData {
   locked: boolean;
   notes: string | null;
   student: {
+    nis: string | null;
     full_name: string;
     class: { name: string; level: { name: string } };
   };
@@ -89,6 +90,7 @@ export default function ScoreVerification() {
           locked,
           notes,
           student:students!inner (
+            nis,
             full_name,
             class_id,
             class:classes (
@@ -160,7 +162,8 @@ export default function ScoreVerification() {
   };
 
   const filteredScores = scores.filter(s => 
-    s.student.full_name.toLowerCase().includes(searchTerm.toLowerCase())
+    s.student.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.student.nis || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -256,6 +259,7 @@ export default function ScoreVerification() {
               <thead className="bg-gray-50 text-gray-600 font-medium border-b border-gray-200">
                 <tr>
                   <th className="px-6 py-4">Nama Santri</th>
+                  <th className="px-6 py-4">NIS</th>
                   <th className="px-6 py-4">Penguji</th>
                   <th className="px-6 py-4 text-center">Total Nilai</th>
                   <th className="px-6 py-4">Predikat</th>
@@ -267,6 +271,7 @@ export default function ScoreVerification() {
                 {filteredScores.map((score) => (
                   <tr key={score.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 font-medium text-gray-900">{score.student.full_name}</td>
+                    <td className="px-6 py-4 text-gray-600">{score.student.nis || '-'}</td>
                     <td className="px-6 py-4 text-gray-600">{score.session?.examiner?.full_name || '-'}</td>
                     <td className="px-6 py-4 text-center">
                       <span className="font-bold text-lg text-gray-900">{score.total_score}</span>
