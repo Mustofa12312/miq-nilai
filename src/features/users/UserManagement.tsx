@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Eye, EyeOff, Loader2, UserCheck, Mail, Key, User } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Eye, EyeOff, Loader2, UserCheck, Mail, Key, User, Trash2, Download, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import type { Profile } from '../../types';
 
@@ -11,6 +11,9 @@ export default function UserManagement() {
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     full_name: '',
@@ -66,6 +69,111 @@ export default function UserManagement() {
     }
   };
 
+  const handleExportCSV = () => {
+    const headers = ['Nama', 'Email', 'Role'];
+    const csvContent = [
+      headers.join(','),
+      ...users.map(u => `"${u.full_name}","${u.email}","${u.role}"`)
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `users_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      if (lines.length < 2) throw new Error("File CSV kosong atau tidak valid.");
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      
+      let successCount = 0;
+      let errorCount = 0;
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.replace(/^"|"$/g, '').trim());
+        if (cols.length >= 2) {
+          const full_name = cols[0];
+          const email = cols[1];
+          const role = cols[2] || 'examiner';
+          const password = cols[3] || 'miq123456';
+
+          const res = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/create-user`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              },
+              body: JSON.stringify({ full_name, email, role, password }),
+            }
+          );
+          if (res.ok) successCount++;
+          else errorCount++;
+        }
+      }
+
+      setSuccessMsg(`Import selesai: ${successCount} berhasil, ${errorCount} gagal.`);
+      fetchUsers();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setIsImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Yakin ingin menghapus pengguna ${name}?`)) return;
+
+    setDeletingId(id);
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/delete-user`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({ user_id: id }),
+        }
+      );
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Gagal menghapus pengguna.');
+
+      setSuccessMsg(`Pengguna ${name} berhasil dihapus.`);
+      fetchUsers();
+    } catch (err: any) {
+      setErrorMsg(err.message);
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+
   const roleLabel = (role: string) => {
     const map: Record<string, string> = {
       super_admin: 'Super Admin', admin: 'Admin', examiner: 'Penguji', leader: 'Pimpinan'
@@ -88,16 +196,32 @@ export default function UserManagement() {
           <h2 className="text-2xl font-bold text-gray-900">Manajemen Pengguna</h2>
           <p className="text-gray-500">Tambah dan kelola akun Admin & Tim Penguji.</p>
         </div>
-        <button
-          onClick={() => { setShowModal(true); setErrorMsg(''); setSuccessMsg(''); }}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
-        >
-          <Plus size={18} />
-          Tambah Pengguna
-        </button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <label className={`flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors cursor-pointer ${isImporting ? 'opacity-70 pointer-events-none' : ''}`}>
+            {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+            {isImporting ? 'Mengimpor...' : 'Import CSV'}
+            <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleImportCSV} disabled={isImporting} />
+          </label>
+          <button onClick={handleExportCSV} className="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors">
+            <Download size={18} />
+            Export CSV
+          </button>
+          <button
+            onClick={() => { setShowModal(true); setErrorMsg(''); setSuccessMsg(''); }}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
+          >
+            <Plus size={18} />
+            Tambah Pengguna
+          </button>
+        </div>
       </div>
 
-      {/* Success notification */}
+      {/* Notifications */}
+      {errorMsg && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-800 rounded-xl font-medium">
+          {errorMsg}
+        </div>
+      )}
       {successMsg && (
         <div className="p-4 bg-green-50 border border-green-200 text-green-800 rounded-xl font-medium">
           {successMsg}
@@ -116,6 +240,7 @@ export default function UserManagement() {
                 <th className="p-4 font-medium">Nama</th>
                 <th className="p-4 font-medium">Email</th>
                 <th className="p-4 font-medium">Role</th>
+                <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -136,6 +261,16 @@ export default function UserManagement() {
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${roleBadgeColor(u.role)}`}>
                       {roleLabel(u.role)}
                     </span>
+                  </td>
+                  <td className="p-4 text-right">
+                    <button
+                      onClick={() => handleDelete(u.id, u.full_name)}
+                      disabled={deletingId === u.id}
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                      title="Hapus Pengguna"
+                    >
+                      {deletingId === u.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                    </button>
                   </td>
                 </tr>
               ))}

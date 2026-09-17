@@ -4,6 +4,7 @@ import { ChevronLeft } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Student, Class } from '../../types';
+import { fetchClassStudentsData } from '../../services/studentService';
 
 interface StudentWithStatus extends Student {
   status: 'SUDAH' | 'BELUM';
@@ -25,78 +26,25 @@ export default function StudentList() {
     const fetchStudents = async () => {
       if (!classId || !user?.id) return;
       try {
-        // Fetch class info
-        const { data: cls } = await supabase
-          .from('classes')
-          .select('*')
-          .eq('id', classId)
-          .single();
-        if (cls) setClassInfo(cls);
+        const data = await fetchClassStudentsData(classId, user.id);
+        
+        setClassInfo(data.classInfo);
+        setActivePeriodId(data.activePeriodId);
+        setDefaultExamTypeId(data.defaultExamTypeId);
 
-        // Fetch students
-        const { data: studentsData } = await supabase
-          .from('students')
-          .select('*')
-          .eq('class_id', classId)
-          .eq('active', true)
-          .order('id', { ascending: true });
-
-        if (studentsData) {
-          const { data: activePeriod } = await supabase
-            .from('exam_periods')
-            .select('id')
-            .eq('active', true)
-            .maybeSingle();
-
-          const { data: defaultExamType } = await supabase
-            .from('exam_types')
-            .select('id')
-            .eq('active', true)
-            .maybeSingle();
-
-          if (activePeriod) setActivePeriodId(activePeriod.id);
-          if (defaultExamType) setDefaultExamTypeId(defaultExamType.id);
-
-          if (!activePeriod) {
-            setStudents([]);
-            return;
-          }
-
-          const { data: assignment } = await supabase
-            .from('examiner_assignments')
-            .select('id')
-            .eq('examiner_id', user.id)
-            .eq('class_id', Number(classId))
-            .eq('period_id', activePeriod.id)
-            .maybeSingle();
-
-          if (!assignment) {
-            setStudents([]);
-            return;
-          }
-
-          let scoredStudentIds = new Set<number>();
-
-          if (activePeriod && defaultExamType) {
-            // FIX: Query scores difilter per periode aktif + exam_type (bukan semua periode)
-            const { data: scoresData } = await supabase
-              .from('scores')
-              .select('student_id')
-              .eq('period_id', activePeriod.id)
-              .eq('exam_type_id', defaultExamType.id);
-
-            scoredStudentIds = new Set(scoresData?.map(s => s.student_id) || []);
-          }
-
-          const mapped: StudentWithStatus[] = studentsData.map(s => ({
-            ...s,
-            status: scoredStudentIds.has(s.id) ? 'SUDAH' : 'BELUM'
-          }));
-
-          setStudents(mapped);
+        if (!data.activePeriodId || !data.hasAssignment) {
+          setStudents([]);
+          return;
         }
+
+        const mapped: StudentWithStatus[] = data.students.map(s => ({
+          ...s,
+          status: data.scoredStudentIds.has(s.id) ? 'SUDAH' : 'BELUM'
+        }));
+
+        setStudents(mapped);
       } catch (err) {
-        console.error('Error fetching students:', err);
+        console.error('Error fetching students data:', err);
       } finally {
         setLoading(false);
       }

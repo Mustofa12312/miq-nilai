@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { CheckSquare, Search, Lock, Unlock, AlertCircle } from 'lucide-react';
+import { CheckSquare, Search, Lock, Unlock, AlertCircle, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Class, ExamPeriod, ExamType } from '../../types';
+import ScoreHistoryModal from './ScoreHistoryModal';
 
 interface ScoreVerificationData {
   id: number;
@@ -34,6 +35,9 @@ export default function ScoreVerification() {
   const [selectedClass, setSelectedClass] = useState<number | ''>('');
   const [selectedExamType, setSelectedExamType] = useState<number | ''>('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // History Modal state
+  const [historyScoreId, setHistoryScoreId] = useState<number | null>(null);
 
   useEffect(() => {
     fetchFilters();
@@ -318,6 +322,13 @@ export default function ScoreVerification() {
                       >
                         {score.locked ? <Unlock size={20} /> : <Lock size={20} />}
                       </button>
+                      <button
+                        onClick={() => setHistoryScoreId(score.id)}
+                        className="p-2 rounded-lg transition-colors text-blue-600 hover:bg-blue-50 ml-1"
+                        title="Lihat Riwayat"
+                      >
+                        <Clock size={20} />
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -326,6 +337,13 @@ export default function ScoreVerification() {
           </div>
         )}
       </div>
+
+      {historyScoreId && (
+        <ScoreHistoryModal 
+          scoreId={historyScoreId} 
+          onClose={() => setHistoryScoreId(null)} 
+        />
+      )}
     </div>
   );
 }
