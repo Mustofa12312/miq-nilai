@@ -2,13 +2,14 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, Settings, LogOut,
-  FileText, UserCog, Menu, X, ChevronRight, CheckSquare, Layers
+  FileText, UserCog, Menu, X, ChevronRight, CheckSquare, Layers, Building2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 const navItems = [
   { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', exact: true },
   { to: '/admin/students', icon: Users, label: 'Santri' },
+  { to: '/admin/rantings', icon: Building2, label: 'Ranting' },
   { to: '/admin/levels', icon: Layers, label: 'Tingkatan' },
   { to: '/admin/classes', icon: BookOpen, label: 'Kelas' },
   { to: '/admin/exams', icon: Settings, label: 'Ujian' },

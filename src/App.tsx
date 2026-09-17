@@ -25,6 +25,7 @@ import ClassManagement from './features/classes/ClassManagement';
 import ExamManagement from './features/exams/ExamManagement';
 import ReportManagement from './features/reports/ReportManagement';
 import UserManagement from './features/users/UserManagement';
+import RantingManagement from './features/rantings/RantingManagement';
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
               <Route path="exams" element={<ExamManagement />} />
               <Route path="reports" element={<ReportManagement />} />
               <Route path="users" element={<UserManagement />} />
+              <Route path="rantings" element={<RantingManagement />} />
               <Route path="verification" element={<ScoreVerification />} />
               <Route path="settings" element={<div className="p-4">Menu Pengaturan</div>} />
             </Route>

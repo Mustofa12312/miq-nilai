@@ -1,5 +1,17 @@
 // Supabase Database Types based on PRD Fase 4
 
+export interface Ranting {
+  id: number;
+  code: string;
+  name: string;
+  gender: 'MALE' | 'FEMALE' | 'MIXED';
+  active: boolean;
+  created_at: string;
+
+  // Relations
+  student_count?: number;
+}
+
 export interface ExamPeriod {
   id: number;
   name: string;
@@ -35,17 +47,21 @@ export interface Class {
 export interface Student {
   id: number;
   class_id: number;
+  ranting_id: number | null;
   nis: string | null;
   full_name: string;
   gender: string | null;
   father_name: string | null;
   branch_code: string | null;
   branch_name: string | null;
+  birth_place: string | null;
+  birth_date: string | null;
   active: boolean;
   created_at: string;
   
   // Relations
   class?: Class;
+  ranting?: Ranting;
 }
 
 export interface Criteria {
