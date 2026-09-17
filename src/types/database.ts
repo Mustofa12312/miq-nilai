@@ -56,6 +56,7 @@ export interface Student {
   branch_name: string | null;
   birth_place: string | null;
   birth_date: string | null;
+  room: string | null;
   active: boolean;
   created_at: string;
   
@@ -122,8 +123,11 @@ export interface ExaminerAssignment {
   examiner_id: string; // UUID from profiles
   class_id: number;
   period_id: number;
+  ranting_id: number | null;
+  room: string | null;
   
   // Relations
   class?: Class;
   period?: ExamPeriod;
+  ranting?: Ranting;
 }
