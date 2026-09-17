@@ -584,6 +584,42 @@ export default function StudentManagement() {
     return matchesSearch && matchesLevel && matchesClass;
   });
 
+  const handleDownloadTemplate = () => {
+    const headers = [
+      'NIS',
+      'Nama',
+      'L/P',
+      'Tempat Lahir',
+      'Tanggal Lahir',
+      'Nama Ayah',
+      'Kode Ranting',
+      'Nama Ranting',
+      'Tingkat',
+      'Kelas',
+      'Ruangan'
+    ];
+    const example = [
+      '123456',
+      'Ahmad Fulan',
+      'L',
+      'Jakarta',
+      '2010-01-01',
+      'Fulan',
+      'RTG-01',
+      'Ranting Pusat',
+      'ULA',
+      'Kelas 1',
+      'Ruang A'
+    ];
+    const csvContent = headers.join(',') + '\n' + example.join(',');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'Template_Import_Santri.csv';
+    link.click();
+  };
+
   const validCount = importRows.filter(r => r.status === 'valid').length;
   const errorCount = importRows.filter(r => r.status === 'error').length;
 
@@ -602,6 +638,13 @@ export default function StudentManagement() {
           >
             <Download size={18} />
             Export
+          </button>
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+          >
+            <FileDown size={18} />
+            Template
           </button>
           <button
             onClick={() => fileRef.current?.click()}
