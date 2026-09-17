@@ -21,7 +21,8 @@ export default function AssignmentManagement() {
     period_id: 0,
     class_id: 0,
     ranting_id: 0,
-    room: ''
+    room: '',
+    gender: ''
   });
 
   const fetchData = async () => {
@@ -101,7 +102,8 @@ export default function AssignmentManagement() {
         period_id: form.period_id,
         class_id: form.class_id,
         ranting_id: form.ranting_id > 0 ? form.ranting_id : null,
-        room: form.room.trim()
+        room: form.room.trim(),
+        gender: form.gender || null
       });
 
       if (error) throw error;
@@ -156,6 +158,7 @@ export default function AssignmentManagement() {
                 <th className="p-4 font-medium">Kelas</th>
                 <th className="p-4 font-medium">Ranting</th>
                 <th className="p-4 font-medium">Ruang/Halaqoh</th>
+                <th className="p-4 font-medium">Gender</th>
                 <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
@@ -176,6 +179,11 @@ export default function AssignmentManagement() {
                     <td className="p-4 text-gray-800">{a.class?.name}</td>
                     <td className="p-4 text-gray-800">{a.ranting?.name || <span className="text-gray-400 italic">Semua Ranting</span>}</td>
                     <td className="p-4 font-bold text-primary">{a.room}</td>
+                    <td className="p-4 text-gray-800">
+                      {a.gender === 'L' ? <span className="text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">Putra (L)</span> 
+                        : a.gender === 'P' ? <span className="text-pink-600 font-medium bg-pink-50 px-2 py-1 rounded">Putri (P)</span> 
+                        : <span className="text-gray-500 italic">Gabungan</span>}
+                    </td>
                     <td className="p-4 text-right">
                       <button
                         onClick={() => handleDelete(a.id)}
@@ -239,6 +247,20 @@ export default function AssignmentManagement() {
                   <option value={0} disabled>-- Pilih Kelas --</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.level?.name})</option>)}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Gender Santri</label>
+                <select
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
+                  value={form.gender}
+                  onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}
+                >
+                  <option value="">-- Semua / Gabungan --</option>
+                  <option value="L">Hanya Putra (Laki-laki)</option>
+                  <option value="P">Hanya Putri (Perempuan)</option>
+                </select>
+                <p className="mt-1 text-xs text-gray-500">Pilih untuk membatasi penguji hanya melihat gender tertentu.</p>
               </div>
 
               <div>
