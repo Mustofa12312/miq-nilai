@@ -327,8 +327,8 @@ export default function StudentManagement() {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { 'No': 1, 'Kode Ranting': 'A-001', 'Nama Ranting': 'PPMU. PANYEPPEN PUTRA', 'NIS': '', 'Nama': 'Ahmad Fulan', 'L/P': 'L', 'Tempat Lahir': 'Sampang', 'Tanggal Lahir': '2010-01-15', 'Nama Ayah': 'Budi', 'Kelas': '4', 'Tingkat': 'ULA' },
-      { 'No': 2, 'Kode Ranting': 'A-001', 'Nama Ranting': 'PPMU. PANYEPPEN PUTRA', 'NIS': '', 'Nama': 'Hasan Ali', 'L/P': 'L', 'Tempat Lahir': 'Pamekasan', 'Tanggal Lahir': '2009-06-20', 'Nama Ayah': 'Ali', 'Kelas': '4', 'Tingkat': 'ULA' },
+      { 'No': 1, 'Kode Ranting': 'A-001', 'Nama Ranting': 'PPMU. PANYEPPEN PUTRA', 'NIS': '', 'Nama': 'Ahmad Fulan', 'L/P': 'L', 'Tempat Lahir': 'Sampang', 'Tanggal Lahir': '2010-01-15', 'Nama Ayah': 'Budi', 'Kelas': '4', 'Tingkat': 'ULA', 'Ruangan': 'Ruang 1' },
+      { 'No': 2, 'Kode Ranting': 'A-001', 'Nama Ranting': 'PPMU. PANYEPPEN PUTRA', 'NIS': '', 'Nama': 'Hasan Ali', 'L/P': 'L', 'Tempat Lahir': 'Pamekasan', 'Tanggal Lahir': '2009-06-20', 'Nama Ayah': 'Ali', 'Kelas': '4', 'Tingkat': 'ULA', 'Ruangan': 'Ruang 1' },
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
@@ -583,42 +583,6 @@ export default function StudentManagement() {
 
     return matchesSearch && matchesLevel && matchesClass;
   });
-
-  const handleDownloadTemplate = () => {
-    const headers = [
-      'NIS',
-      'Nama',
-      'L/P',
-      'Tempat Lahir',
-      'Tanggal Lahir',
-      'Nama Ayah',
-      'Kode Ranting',
-      'Nama Ranting',
-      'Tingkat',
-      'Kelas',
-      'Ruangan'
-    ];
-    const example = [
-      '123456',
-      'Ahmad Fulan',
-      'L',
-      'Jakarta',
-      '2010-01-01',
-      'Fulan',
-      'RTG-01',
-      'Ranting Pusat',
-      'ULA',
-      'Kelas 1',
-      'Ruang A'
-    ];
-    const csvContent = headers.join(',') + '\n' + example.join(',');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = 'Template_Import_Santri.csv';
-    link.click();
-  };
 
   const validCount = importRows.filter(r => r.status === 'valid').length;
   const errorCount = importRows.filter(r => r.status === 'error').length;
