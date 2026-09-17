@@ -21,6 +21,7 @@ export default function AssignmentManagement() {
     period_id: 0,
     class_id: 0,
     ranting_ids: [] as number[],
+    room: '',
   });
 
   const fetchData = async () => {
@@ -75,7 +76,7 @@ export default function AssignmentManagement() {
             period_id: form.period_id,
             class_id: form.class_id,
             ranting_id: rid,
-            room: null,
+            room: form.room || null,
             gender: null
           });
         }
@@ -85,7 +86,7 @@ export default function AssignmentManagement() {
           period_id: form.period_id,
           class_id: form.class_id,
           ranting_id: null,
-          room: null,
+          room: form.room || null,
           gender: null
         });
       }
@@ -143,6 +144,7 @@ export default function AssignmentManagement() {
                 <th className="p-4 font-medium">Penguji</th>
                 <th className="p-4 font-medium">Kelas</th>
                 <th className="p-4 font-medium">Ranting</th>
+                <th className="p-4 font-medium">Ruang</th>
                 <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
@@ -162,6 +164,7 @@ export default function AssignmentManagement() {
                     </td>
                     <td className="p-4 text-gray-800">{a.class?.name}</td>
                     <td className="p-4 text-gray-800">{a.ranting?.name || <span className="text-gray-400 italic">Semua Ranting</span>}</td>
+                    <td className="p-4 text-gray-800">{a.room || '-'}</td>
                     <td className="p-4 text-right">
                       <button
                         onClick={() => handleDelete(a.id)}
@@ -225,6 +228,17 @@ export default function AssignmentManagement() {
                   <option value={0} disabled>-- Pilih Kelas --</option>
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name} ({c.level?.name})</option>)}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ruangan (Opsional)</label>
+                <input
+                  type="text"
+                  placeholder="Contoh: Ruang 01"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
+                  value={form.room}
+                  onChange={e => setForm(f => ({ ...f, room: e.target.value }))}
+                />
               </div>
 
               <div>
