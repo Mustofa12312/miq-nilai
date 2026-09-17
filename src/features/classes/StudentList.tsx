@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Student, Class } from '../../types';
 import { fetchClassStudentsData } from '../../services/studentService';
@@ -51,7 +50,7 @@ export default function StudentList() {
     };
 
     fetchStudents();
-  }, [classId]);
+  }, [classId, user?.id]);
 
   if (loading) return <div className="p-8 text-center">Memuat data santri...</div>;
 
