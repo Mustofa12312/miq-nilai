@@ -272,6 +272,8 @@ export default function ClassManagement() {
       // Hapus seluruh dependensi agar tabel kelas dapat dibersihkan
       await supabase.from('score_details').delete().neq('id', 0);
       await supabase.from('scores').delete().neq('id', 0);
+      await supabase.from('score_sessions').delete().neq('id', 0);
+      await supabase.from('examiner_assignments').delete().neq('id', 0);
       await supabase.from('students').delete().neq('id', 0);
       
       const { error } = await supabase.from('classes').delete().neq('id', 0);

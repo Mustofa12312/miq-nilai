@@ -23,10 +23,11 @@ interface ImportRow {
   birth_date?: string;
   class_name?: string;
   tingkat?: string;  // ULA / Wustho / etc.
-  status?: string;   // 'valid' | 'error'
-  error?: string;
   class_id?: number;
   ranting_id?: number | null;
+  room?: string;
+  status: 'valid' | 'error';
+  error?: string;
 }
 
 export default function StudentManagement() {
@@ -180,6 +181,7 @@ export default function StudentManagement() {
             const birthPlace = String(row['Tempat Lahir'] || row['tempat_lahir'] || '').trim();
             const birthDateRaw = row['Tanggal Lahir'] || row['tanggal_lahir'];
             const birthDate = parseDate(birthDateRaw);
+            const room = String(row['Ruangan'] || row['Ruang'] || row['Halaqoh'] || row['ruangan'] || '').trim();
 
             if (!name) return { full_name: name, status: 'error', error: 'Nama kosong' };
             if (!kelas) return { full_name: name, status: 'error', error: 'Kelas kosong' };
@@ -232,6 +234,7 @@ export default function StudentManagement() {
               tingkat,
               class_id: foundClass.id,
               ranting_id: rantingId,
+              room,
               status: 'valid',
             };
           });
@@ -294,6 +297,7 @@ export default function StudentManagement() {
           branch_name: r.branch_name,
           ranting_id: r.ranting_id ?? null,
           class_id: r.class_id,
+          room: r.room || null,
           active: true,
         };
       });
