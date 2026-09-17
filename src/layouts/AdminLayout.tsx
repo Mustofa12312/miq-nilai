@@ -13,6 +13,7 @@ const navItems = [
   { to: '/admin/levels', icon: Layers, label: 'Tingkatan' },
   { to: '/admin/classes', icon: BookOpen, label: 'Kelas' },
   { to: '/admin/exams', icon: Settings, label: 'Ujian' },
+  { to: '/admin/assignments', icon: Users, label: 'Plotting' },
   { to: '/admin/verification', icon: CheckSquare, label: 'Verifikasi' },
   { to: '/admin/reports', icon: FileText, label: 'Laporan' },
   { to: '/admin/users', icon: UserCog, label: 'Pengguna' },
