@@ -10,6 +10,7 @@ export default function AssignmentManagement() {
   const [periods, setPeriods] = useState<ExamPeriod[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [rantings, setRantings] = useState<Ranting[]>([]);
+  const [availableRooms, setAvailableRooms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states
@@ -56,9 +57,39 @@ export default function AssignmentManagement() {
     fetchData();
   }, []);
 
+  // Fetch available rooms when class or ranting changes
+  useEffect(() => {
+    async function fetchRooms() {
+      if (!form.class_id) {
+        setAvailableRooms([]);
+        return;
+      }
+      
+      let query = supabase
+        .from('students')
+        .select('room')
+        .eq('class_id', form.class_id)
+        .eq('active', true)
+        .not('room', 'is', null)
+        .neq('room', '');
+
+      if (form.ranting_id > 0) {
+        query = query.eq('ranting_id', form.ranting_id);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        const uniqueRooms = Array.from(new Set(data.map(d => d.room as string))).filter(Boolean);
+        setAvailableRooms(uniqueRooms.sort());
+      }
+    }
+    
+    fetchRooms();
+  }, [form.class_id, form.ranting_id]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.examiner_id || !form.period_id || !form.class_id || !form.ranting_id || !form.room.trim()) {
+    if (!form.examiner_id || !form.period_id || !form.class_id || !form.room.trim()) {
       toast.error('Harap isi semua bidang');
       return;
     }
@@ -69,7 +100,7 @@ export default function AssignmentManagement() {
         examiner_id: form.examiner_id,
         period_id: form.period_id,
         class_id: form.class_id,
-        ranting_id: form.ranting_id,
+        ranting_id: form.ranting_id > 0 ? form.ranting_id : null,
         room: form.room.trim()
       });
 
@@ -143,7 +174,7 @@ export default function AssignmentManagement() {
                       {examiner?.full_name || 'Tidak ditemukan'}
                     </td>
                     <td className="p-4 text-gray-800">{a.class?.name}</td>
-                    <td className="p-4 text-gray-800">{a.ranting?.name}</td>
+                    <td className="p-4 text-gray-800">{a.ranting?.name || <span className="text-gray-400 italic">Semua Ranting</span>}</td>
                     <td className="p-4 font-bold text-primary">{a.room}</td>
                     <td className="p-4 text-right">
                       <button
@@ -213,12 +244,11 @@ export default function AssignmentManagement() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Ranting</label>
                 <select
-                  required
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
                   value={form.ranting_id}
                   onChange={e => setForm(f => ({ ...f, ranting_id: Number(e.target.value) }))}
                 >
-                  <option value={0} disabled>-- Pilih Ranting --</option>
+                  <option value={0}>-- Semua Ranting --</option>
                   {rantings.map(r => <option key={r.id} value={r.id}>{r.name} ({r.code})</option>)}
                 </select>
               </div>
@@ -228,11 +258,16 @@ export default function AssignmentManagement() {
                 <input
                   type="text"
                   required
+                  list="room-suggestions"
                   placeholder="Misal: Ruang 1, Ruang Utama, Halaqoh A"
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
                   value={form.room}
                   onChange={e => setForm(f => ({ ...f, room: e.target.value }))}
                 />
+                <datalist id="room-suggestions">
+                  {availableRooms.map(r => <option key={r} value={r} />)}
+                </datalist>
+                <p className="mt-1 text-xs text-gray-500">Pilih dari saran atau ketik manual jika belum ada.</p>
               </div>
 
               <div className="flex gap-3 pt-4">
