@@ -5,23 +5,28 @@ import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import QRCode from 'qrcode';
 import jsPDF from 'jspdf';
-import type { Student, Class, Level } from '../../types';
+import type { Student, Class, Level, Ranting } from '../../types';
 
 interface StudentData extends Student {
   class?: Class & { level?: Level };
 }
 
 interface ImportRow {
+  no?: number;
   nis?: string;
   full_name: string;
   gender?: string;
   father_name?: string;
   branch_code?: string;
   branch_name?: string;
+  birth_place?: string;
+  birth_date?: string;
   class_name?: string;
-  status?: string; // 'valid' | 'error'
+  tingkat?: string;  // ULA / Wustho / etc.
+  status?: string;   // 'valid' | 'error'
   error?: string;
   class_id?: number;
+  ranting_id?: number | null;
 }
 
 export default function StudentManagement() {
@@ -29,6 +34,7 @@ export default function StudentManagement() {
   const [students, setStudents] = useState<StudentData[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
+  const [rantings, setRantings] = useState<Ranting[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Filters
@@ -63,10 +69,11 @@ export default function StudentManagement() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [studentsRes, classesRes, levelsRes] = await Promise.all([
+      const [studentsRes, classesRes, levelsRes, rantingsRes] = await Promise.all([
         supabase.from('students').select('*, class:classes(id, name, level_id, level:levels(id, name))').order('id', { ascending: true }),
         supabase.from('classes').select('*').order('name'),
-        supabase.from('levels').select('*').order('sort_order')
+        supabase.from('levels').select('*').order('sort_order'),
+        supabase.from('rantings').select('*').order('code'),
       ]);
       if (studentsRes.data) setStudents(studentsRes.data as any);
       if (classesRes.data) {
@@ -76,6 +83,7 @@ export default function StudentManagement() {
         setClasses(sortedClasses);
       }
       if (levelsRes.data) setLevels(levelsRes.data);
+      if (rantingsRes.data) setRantings(rantingsRes.data);
     } finally {
       setLoading(false);
     }
@@ -84,6 +92,28 @@ export default function StudentManagement() {
   useEffect(() => { fetchData(); }, []);
 
   // -- IMPORT LOGIC --
+  // Helper: Normalize kelas value (VI -> 6, 'VI ' -> 6, dll)
+  const normalizeKelas = (val: any): string => {
+    const s = String(val).trim();
+    const romanMap: Record<string, string> = { I: '1', II: '2', III: '3', IV: '4', V: '5', VI: '6', VII: '7' };
+    const upper = s.toUpperCase().trim();
+    if (romanMap[upper]) return romanMap[upper];
+    return s;
+  };
+
+  // Helper: Parse date dari Excel (number atau string)
+  const parseDate = (val: any): string | undefined => {
+    if (!val) return undefined;
+    if (val instanceof Date) return val.toISOString().split('T')[0];
+    if (typeof val === 'number') {
+      // Excel serial date
+      const excelEpoch = new Date(1899, 11, 30);
+      const d = new Date(excelEpoch.getTime() + val * 86400000);
+      return d.toISOString().split('T')[0];
+    }
+    return String(val).trim() || undefined;
+  };
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -95,44 +125,116 @@ export default function StudentManagement() {
     reader.onload = (evt) => {
       try {
         const data = new Uint8Array(evt.target!.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        // Auto-detect: cari baris header (ada kolom "Nama" atau "No")
+        // Sheet mungkin punya 3-4 baris judul sebelum data
+        const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
         
+        // Coba format standar dulu (header di baris pertama)
+        let rows = rawRows;
+        
+        // Jika header utama bukan kolom data, coba skip baris awal (format ranting.xlsx)
+        const isRantingFormat = rawRows.length > 0 && (
+          rawRows[0]['No'] !== undefined || rawRows[0]['Kode Ranting'] !== undefined
+        );
+
+        if (!isRantingFormat) {
+          // Coba baca dengan skipRows untuk menghindari baris judul
+          const rawAll: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
+          // Cari index baris yang mengandung 'Nama'
+          const headerRowIndex = rawAll.findIndex(r => 
+            r.some(cell => String(cell).toLowerCase() === 'nama')
+          );
+          if (headerRowIndex >= 0) {
+            const headers = rawAll[headerRowIndex] as string[];
+            rows = rawAll.slice(headerRowIndex + 1).map(r => {
+              const obj: any = {};
+              headers.forEach((h, i) => { obj[h] = r[i] ?? ''; });
+              return obj;
+            }).filter(r => r['Nama'] || r['nama']);
+          }
+        }
+
         if (rows.length === 0) {
           setImportError('File kosong atau format tidak sesuai.');
           return;
         }
 
         // Validate each row
-        const parsed: ImportRow[] = rows.map((row) => {
-          const name = row['Nama'] || row['nama'] || row['full_name'] || '';
-          const className = row['Kelas'] || row['kelas'] || row['class_name'] || '';
-          const nis = row['NIS'] || row['nis'] || '';
-          const gender = row['JK'] || row['jk'] || row['Jenis Kelamin'] || 'L';
-          const fatherName = row['Nama Ayah'] || row['nama_ayah'] || '';
-          const branchCode = row['Kode Ranting'] || row['kode_ranting'] || '';
-          const branchName = row['Nama Ranting'] || row['nama_ranting'] || '';
-          
-          if (!name.trim()) return { full_name: name, class_name: className, status: 'error', error: 'Nama kosong' };
-          if (!nis.toString().trim()) return { full_name: name, class_name: className, status: 'error', error: 'NIS kosong' };
-          
-          // Find matching class_id
-          const foundClass = classes.find(c => c.name.toLowerCase() === className.toLowerCase());
-          if (!foundClass) return { full_name: name, class_name: className, status: 'error', error: `Kelas "${className}" tidak ditemukan` };
-          
-          return { 
-            full_name: name.trim(), 
-            nis: nis.toString().trim(),
-            gender: gender.toString().trim().toUpperCase(),
-            father_name: fatherName.toString().trim(),
-            branch_code: branchCode.toString().trim(),
-            branch_name: branchName.toString().trim(),
-            class_name: className, 
-            class_id: foundClass.id, 
-            status: 'valid' 
-          };
-        });
+        const parsed: ImportRow[] = rows
+          .filter((row: any) => {
+            const name = row['Nama'] || row['nama'] || row['full_name'] || '';
+            return String(name).trim() !== '';
+          })
+          .map((row: any) => {
+            const name = String(row['Nama'] || row['nama'] || row['full_name'] || '').trim();
+            const rawKelas = row['Kelas'] || row['kelas'] || row['class_name'] || '';
+            const kelas = normalizeKelas(rawKelas);
+            const tingkat = String(row['Tingkat'] || row['tingkat'] || '').trim();
+            const gender = String(row['L/P'] || row['JK'] || row['jk'] || 'L').trim().toUpperCase();
+            const fatherName = String(row['Nama Ayah'] || row['nama_ayah'] || '').trim();
+            const branchCode = String(row['Kode Ranting'] || row['kode_ranting'] || '').trim().toUpperCase();
+            const branchName = String(row['Nama Ranting'] || row['nama_ranting'] || '').trim();
+            const birthPlace = String(row['Tempat Lahir'] || row['tempat_lahir'] || '').trim();
+            const birthDateRaw = row['Tanggal Lahir'] || row['tanggal_lahir'];
+            const birthDate = parseDate(birthDateRaw);
+
+            if (!name) return { full_name: name, status: 'error', error: 'Nama kosong' };
+            if (!kelas) return { full_name: name, status: 'error', error: 'Kelas kosong' };
+
+            // Cari kelas yang cocok berdasarkan: nama kelas = kelas, dan nama tingkat = level name
+            let foundClass = classes.find(c => {
+              const nameMatch = c.name.toLowerCase() === kelas.toLowerCase();
+              if (!tingkat) return nameMatch;
+              const level = levels.find(l => l.id === c.level_id);
+              const levelMatch = level?.name?.toLowerCase().includes(tingkat.toLowerCase()) ||
+                level?.name?.toLowerCase() === tingkat.toLowerCase();
+              return nameMatch && levelMatch;
+            });
+
+            // Jika tidak ketemu dengan tingkat, coba tanpa filter tingkat
+            if (!foundClass) {
+              foundClass = classes.find(c => c.name.toLowerCase() === kelas.toLowerCase());
+            }
+
+            // Cari ranting
+            let foundRanting = rantings.find(r => r.code === branchCode);
+            const rantingId = foundRanting?.id ?? null;
+
+            // Auto-generate NIS dari kode ranting + nomor urut jika kosong
+            const rawNis = String(row['NIS'] || row['nis'] || row['ID'] || '').trim();
+            const nis = rawNis || undefined; // biarkan undefined, bisa di-generate saat import
+
+            if (!foundClass) {
+              return {
+                full_name: name,
+                class_name: kelas,
+                tingkat,
+                status: 'error',
+                error: `Kelas "${kelas}" (${tingkat}) belum ada di sistem — buat dulu di menu Kelas`,
+                branch_code: branchCode,
+                branch_name: branchName,
+              };
+            }
+
+            return {
+              full_name: name,
+              nis,
+              gender: gender === 'P' ? 'P' : 'L',
+              father_name: fatherName,
+              birth_place: birthPlace,
+              birth_date: birthDate,
+              branch_code: branchCode,
+              branch_name: branchName,
+              class_name: kelas,
+              tingkat,
+              class_id: foundClass.id,
+              ranting_id: rantingId,
+              status: 'valid',
+            };
+          });
 
         setImportRows(parsed);
         setShowImportModal(true);
@@ -150,21 +252,62 @@ export default function StudentManagement() {
     if (validRows.length === 0) return;
 
     setImportLoading(true);
+    setImportError('');
     try {
-      const toInsert = validRows.map(r => ({
-        nis: r.nis,
-        full_name: r.full_name,
-        gender: r.gender,
-        father_name: r.father_name,
-        branch_code: r.branch_code,
-        branch_name: r.branch_name,
-        class_id: r.class_id,
-        active: true,
-      }));
+      // Step 1: Auto-create rantings yang belum ada
+      const newRantingCodes = [...new Set(
+        validRows
+          .filter(r => r.branch_code && r.ranting_id == null)
+          .map(r => ({ code: r.branch_code!, name: r.branch_name || r.branch_code! }))
+      )];
+      
+      if (newRantingCodes.length > 0) {
+        // Deduplicate by code
+        const unique = newRantingCodes.filter((r, i, arr) => arr.findIndex(x => x.code === r.code) === i);
+        const { data: newRantings } = await supabase
+          .from('rantings')
+          .upsert(unique, { onConflict: 'code' })
+          .select();
+        
+        if (newRantings) {
+          // Update ranting_id di rows yang baru dibuat
+          newRantings.forEach(nr => {
+            validRows.forEach(row => {
+              if (row.branch_code === nr.code) row.ranting_id = nr.id;
+            });
+          });
+        }
+      }
 
-      const { error } = await supabase.from('students').insert(toInsert);
-      if (error) throw error;
+      // Step 2: Insert santri
+      let sisaCursor = 1;
+      const toInsert = validRows.map(r => {
+        const generatedNis = r.nis || `${r.branch_code || 'MIQ'}-${String(sisaCursor++).padStart(3, '0')}`;
+        return {
+          nis: generatedNis,
+          full_name: r.full_name,
+          gender: r.gender,
+          father_name: r.father_name,
+          birth_place: r.birth_place,
+          birth_date: r.birth_date || null,
+          branch_code: r.branch_code,
+          branch_name: r.branch_name,
+          ranting_id: r.ranting_id ?? null,
+          class_id: r.class_id,
+          active: true,
+        };
+      });
+
+      // Insert in batches of 100
+      const batchSize = 100;
+      for (let i = 0; i < toInsert.length; i += batchSize) {
+        const batch = toInsert.slice(i, i + batchSize);
+        const { error } = await supabase.from('students').insert(batch);
+        if (error) throw error;
+      }
+
       setImportDone(true);
+      toast.success(`${validRows.length} santri berhasil diimport!`);
       setTimeout(() => {
         setShowImportModal(false);
         setImportRows([]);
@@ -180,12 +323,12 @@ export default function StudentManagement() {
 
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.json_to_sheet([
-      { NIS: '12345', Nama: 'Ahmad Fulan', JK: 'L', 'Nama Ayah': 'Budi', 'Kode Ranting': 'R01', 'Nama Ranting': 'Ranting Pusat', Kelas: 'A1' },
-      { NIS: '12346', Nama: 'Siti Aisyah', JK: 'P', 'Nama Ayah': 'Anto', 'Kode Ranting': 'R01', 'Nama Ranting': 'Ranting Pusat', Kelas: 'B2' }
+      { 'No': 1, 'Kode Ranting': 'A-001', 'Nama Ranting': 'PPMU. PANYEPPEN PUTRA', 'NIS': '', 'Nama': 'Ahmad Fulan', 'L/P': 'L', 'Tempat Lahir': 'Sampang', 'Tanggal Lahir': '2010-01-15', 'Nama Ayah': 'Budi', 'Kelas': '4', 'Tingkat': 'ULA' },
+      { 'No': 2, 'Kode Ranting': 'A-001', 'Nama Ranting': 'PPMU. PANYEPPEN PUTRA', 'NIS': '', 'Nama': 'Hasan Ali', 'L/P': 'L', 'Tempat Lahir': 'Pamekasan', 'Tanggal Lahir': '2009-06-20', 'Nama Ayah': 'Ali', 'Kelas': '4', 'Tingkat': 'ULA' },
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, 'Template_Import_Santri.xlsx');
+    XLSX.writeFile(wb, 'Template_Import_Santri_MIQ.xlsx');
   };
 
   const handleExportData = () => {
