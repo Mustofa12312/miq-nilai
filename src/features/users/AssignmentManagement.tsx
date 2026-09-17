@@ -20,9 +20,7 @@ export default function AssignmentManagement() {
     examiner_id: '',
     period_id: 0,
     class_id: 0,
-    ranting_id: 0,
-    room: '',
-    gender: ''
+    ranting_ids: [] as number[],
   });
 
   const fetchData = async () => {
@@ -58,58 +56,46 @@ export default function AssignmentManagement() {
     fetchData();
   }, []);
 
-  // Fetch available rooms when class or ranting changes
-  useEffect(() => {
-    async function fetchRooms() {
-      if (!form.class_id) {
-        setAvailableRooms([]);
-        return;
-      }
-      
-      let query = supabase
-        .from('students')
-        .select('room')
-        .eq('class_id', form.class_id)
-        .eq('active', true)
-        .not('room', 'is', null)
-        .neq('room', '');
-
-      if (form.ranting_id > 0) {
-        query = query.eq('ranting_id', form.ranting_id);
-      }
-
-      const { data, error } = await query;
-      if (!error && data) {
-        const uniqueRooms = Array.from(new Set(data.map(d => d.room as string))).filter(Boolean);
-        setAvailableRooms(uniqueRooms.sort());
-      }
-    }
-    
-    fetchRooms();
-  }, [form.class_id, form.ranting_id]);
+  // Removed room fetch logic
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.examiner_id || !form.period_id || !form.class_id || !form.room.trim()) {
+    if (!form.examiner_id || !form.period_id || !form.class_id) {
       toast.error('Harap isi semua bidang');
       return;
     }
 
     setIsSaving(true);
     try {
-      const { error } = await supabase.from('examiner_assignments').insert({
-        examiner_id: form.examiner_id,
-        period_id: form.period_id,
-        class_id: form.class_id,
-        ranting_id: form.ranting_id > 0 ? form.ranting_id : null,
-        room: form.room.trim(),
-        gender: form.gender || null
-      });
+      const inserts = [];
+      if (form.ranting_ids.length > 0) {
+        for (const rid of form.ranting_ids) {
+          inserts.push({
+            examiner_id: form.examiner_id,
+            period_id: form.period_id,
+            class_id: form.class_id,
+            ranting_id: rid,
+            room: null,
+            gender: null
+          });
+        }
+      } else {
+        inserts.push({
+          examiner_id: form.examiner_id,
+          period_id: form.period_id,
+          class_id: form.class_id,
+          ranting_id: null,
+          room: null,
+          gender: null
+        });
+      }
+
+      const { error } = await supabase.from('examiner_assignments').insert(inserts);
 
       if (error) throw error;
       toast.success('Penguji berhasil ditugaskan');
       setShowModal(false);
-      setForm(f => ({ ...f, room: '' })); // reset room
+      setForm(f => ({ ...f, ranting_ids: [] }));
       fetchData();
     } catch (err: any) {
       console.error(err);
@@ -135,8 +121,8 @@ export default function AssignmentManagement() {
     <div className="space-y-6 pb-10">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Plotting Penguji (Ruangan)</h2>
-          <p className="text-gray-500">Tugaskan penguji ke ruangan/halaqoh tertentu pada suatu ranting.</p>
+          <h2 className="text-2xl font-bold text-gray-900">Plotting Penguji</h2>
+          <p className="text-gray-500">Tugaskan penguji ke kelas dan ranting tertentu.</p>
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -157,8 +143,6 @@ export default function AssignmentManagement() {
                 <th className="p-4 font-medium">Penguji</th>
                 <th className="p-4 font-medium">Kelas</th>
                 <th className="p-4 font-medium">Ranting</th>
-                <th className="p-4 font-medium">Ruang/Halaqoh</th>
-                <th className="p-4 font-medium">Gender</th>
                 <th className="p-4 font-medium text-right">Aksi</th>
               </tr>
             </thead>
@@ -178,12 +162,6 @@ export default function AssignmentManagement() {
                     </td>
                     <td className="p-4 text-gray-800">{a.class?.name}</td>
                     <td className="p-4 text-gray-800">{a.ranting?.name || <span className="text-gray-400 italic">Semua Ranting</span>}</td>
-                    <td className="p-4 font-bold text-primary">{a.room}</td>
-                    <td className="p-4 text-gray-800">
-                      {a.gender === 'L' ? <span className="text-blue-600 font-medium bg-blue-50 px-2 py-1 rounded">Putra (L)</span> 
-                        : a.gender === 'P' ? <span className="text-pink-600 font-medium bg-pink-50 px-2 py-1 rounded">Putri (P)</span> 
-                        : <span className="text-gray-500 italic">Gabungan</span>}
-                    </td>
                     <td className="p-4 text-right">
                       <button
                         onClick={() => handleDelete(a.id)}
@@ -250,46 +228,43 @@ export default function AssignmentManagement() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Gender Santri</label>
-                <select
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
-                  value={form.gender}
-                  onChange={e => setForm(f => ({ ...f, gender: e.target.value }))}
-                >
-                  <option value="">-- Semua / Gabungan --</option>
-                  <option value="L">Hanya Putra (Laki-laki)</option>
-                  <option value="P">Hanya Putri (Perempuan)</option>
-                </select>
-                <p className="mt-1 text-xs text-gray-500">Pilih untuk membatasi penguji hanya melihat gender tertentu.</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ranting</label>
-                <select
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
-                  value={form.ranting_id}
-                  onChange={e => setForm(f => ({ ...f, ranting_id: Number(e.target.value) }))}
-                >
-                  <option value={0}>-- Semua Ranting --</option>
-                  {rantings.map(r => <option key={r.id} value={r.id}>{r.name} ({r.code})</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ruang / Halaqoh</label>
-                <input
-                  type="text"
-                  required
-                  list="room-suggestions"
-                  placeholder="Misal: Ruang 1, Ruang Utama, Halaqoh A"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none"
-                  value={form.room}
-                  onChange={e => setForm(f => ({ ...f, room: e.target.value }))}
-                />
-                <datalist id="room-suggestions">
-                  {availableRooms.map(r => <option key={r} value={r} />)}
-                </datalist>
-                <p className="mt-1 text-xs text-gray-500">Pilih dari saran atau ketik manual jika belum ada.</p>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Pilih Ranting (Bisa Lebih dari 1)</label>
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 max-h-48 overflow-y-auto space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                      checked={form.ranting_ids.length === 0}
+                      onChange={(e) => {
+                        if (e.target.checked) setForm(f => ({ ...f, ranting_ids: [] }));
+                      }}
+                    />
+                    <span className="text-sm font-medium">Semua Ranting (Tidak dibatasi)</span>
+                  </label>
+                  <hr className="my-2 border-gray-200" />
+                  {rantings.map(r => (
+                    <label key={r.id} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 text-primary rounded border-gray-300 focus:ring-primary"
+                        checked={form.ranting_ids.includes(r.id)}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setForm(f => {
+                            let newIds = [...f.ranting_ids];
+                            if (checked) {
+                              newIds.push(r.id);
+                            } else {
+                              newIds = newIds.filter(id => id !== r.id);
+                            }
+                            return { ...f, ranting_ids: newIds };
+                          });
+                        }}
+                      />
+                      <span className="text-sm">{r.name} ({r.code})</span>
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div className="flex gap-3 pt-4">
