@@ -34,7 +34,7 @@ export default function ExamManagement() {
   // Form state
   const [periodForm, setPeriodForm] = useState({ name: '', start_date: '', end_date: '', active: true });
   const [examTypeForm, setExamTypeForm] = useState({ name: '', active: false });
-  const [criteriaForm, setCriteriaForm] = useState({ category: 'TAJWID', name: '', default_score: 100, deduction: 1, sort_order: 1 });
+  const [criteriaForm, setCriteriaForm] = useState({ category: 'TAJWID', name: '', default_score: 100, deduction: 1, sort_order: 1, active: true });
 
   const fetchData = async () => {
     setLoading(true);
@@ -42,7 +42,7 @@ export default function ExamManagement() {
       const [periodsRes, examTypesRes, criteriaRes] = await Promise.all([
         supabase.from('exam_periods').select('*').order('start_date', { ascending: false }),
         supabase.from('exam_types').select('*').order('id', { ascending: true }),
-        supabase.from('criteria').select('*').order('sort_order')
+        supabase.from('criteria').select('*').order('sort_order', { ascending: true })
       ]);
 
       if (periodsRes.data) setPeriods(periodsRes.data);
@@ -174,13 +174,13 @@ export default function ExamManagement() {
   // --- CRITERIA HANDLERS ---
   const handleOpenAddCriteria = () => {
     setEditCriteriaId(null);
-    setCriteriaForm({ category: 'TAJWID', name: '', default_score: 100, deduction: 1, sort_order: 1 });
+    setCriteriaForm({ category: 'TAJWID', name: '', default_score: 100, deduction: 1, sort_order: 1, active: true });
     setShowCriteriaModal(true);
   };
 
   const handleOpenEditCriteria = (c: Criteria) => {
     setEditCriteriaId(c.id);
-    setCriteriaForm({ category: c.category, name: c.name, default_score: c.default_score, deduction: c.deduction, sort_order: c.sort_order });
+    setCriteriaForm({ category: c.category, name: c.name, default_score: c.default_score, deduction: c.deduction, sort_order: c.sort_order, active: c.active ?? true });
     setShowCriteriaModal(true);
   };
 
@@ -342,9 +342,12 @@ export default function ExamManagement() {
                   <div className="space-y-2">
                     {groupedCriteria[category].map(item => (
                       <div key={item.id} className="flex justify-between items-center p-3 border border-gray-100 rounded-lg group">
-                        <span className="font-medium text-gray-700">{item.name}</span>
+                        <span className="font-medium text-gray-700">
+                          {item.name}
+                          <span className="text-xs font-normal text-gray-400 ml-2">(Urutan: {item.sort_order})</span>
+                        </span>
                         <div className="flex items-center gap-3">
-                          <span className="text-sm text-gray-500">Maks: {item.default_score} (Potong -{item.deduction})</span>
+                          <span className="text-sm text-gray-500">Potongan: -{item.deduction} / kesalahan</span>
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => handleOpenEditCriteria(item)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md">
                               <Edit2 size={16} />
@@ -483,14 +486,14 @@ export default function ExamManagement() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nilai Maksimal</label>
-                  <input required type="number" className="w-full px-3 py-2 border rounded-lg" 
-                    value={criteriaForm.default_score} onChange={e => setCriteriaForm({...criteriaForm, default_score: Number(e.target.value)})} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Pengurangan / Kesalahan</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Pengurangan per Kesalahan (Poin)</label>
                   <input required type="number" className="w-full px-3 py-2 border rounded-lg" 
                     value={criteriaForm.deduction} onChange={e => setCriteriaForm({...criteriaForm, deduction: Number(e.target.value)})} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Urutan Tampil</label>
+                  <input required type="number" className="w-full px-3 py-2 border rounded-lg" 
+                    value={criteriaForm.sort_order} onChange={e => setCriteriaForm({...criteriaForm, sort_order: Number(e.target.value)})} />
                 </div>
               </div>
             </div>
