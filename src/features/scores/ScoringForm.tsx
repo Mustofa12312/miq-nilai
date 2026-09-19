@@ -51,14 +51,14 @@ export default function ScoringForm() {
     });
   };
 
+  // Logika baru: Total = 100 - semua potongan (tanpa batas per kriteria)
+  // Setiap kesalahan langsung mengurangi dari total 100, tidak dibatasi oleh default_score per kriteria
   const totalScore = useMemo(() => {
-    return criteriaList.reduce((acc, criteria) => {
+    const totalDeduction = criteriaList.reduce((acc, criteria) => {
       const criteriaMistakes = mistakes[criteria.id] || 0;
-      const penalty = criteriaMistakes * criteria.deduction;
-      let finalCriteriaScore = criteria.default_score - penalty;
-      if (finalCriteriaScore < 0) finalCriteriaScore = 0;
-      return acc + finalCriteriaScore;
+      return acc + (criteriaMistakes * criteria.deduction);
     }, 0);
+    return Math.max(0, 100 - totalDeduction);
   }, [mistakes, criteriaList]);
 
   const handleSave = async () => {
@@ -153,11 +153,13 @@ export default function ScoringForm() {
       // 4. Create score_details
       const detailsToInsert = criteriaList.map(cr => {
         const mstk = mistakes[cr.id] || 0;
+        // Simpan jumlah kesalahan dan potongan langsung (tidak dibatasi default_score)
+        // Trigger database akan hitung total = 100 - semua potongan
         return {
           score_id: scoreRec.id,
           criteria_id: cr.id,
           mistakes: mstk,
-          score: Math.max(0, cr.default_score - (mstk * cr.deduction))
+          score: mstk * cr.deduction  // simpan total potongan untuk kriteria ini
         };
       });
 
@@ -215,17 +217,21 @@ export default function ScoringForm() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100 overflow-hidden">
               {criteriaList.filter(c => c.category === category).map(criteria => {
                 const currentMistakes = mistakes[criteria.id] || 0;
-                const currentScore = Math.max(0, criteria.default_score - (currentMistakes * criteria.deduction));
+                const currentDeduction = currentMistakes * criteria.deduction;
 
                 return (
                   <div key={criteria.id} className="p-4 flex flex-col gap-3">
                     <div className="flex justify-between items-start">
                       <div>
                         <p className="font-bold text-gray-900">{criteria.name}</p>
-                        <p className="text-xs text-gray-500">Maks: {criteria.default_score} • Potongan: -{criteria.deduction}</p>
+                        <p className="text-xs text-gray-500">Potongan: -{criteria.deduction} per kesalahan</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-lg font-bold text-primary">{currentScore}</p>
+                        {currentDeduction > 0 ? (
+                          <p className="text-lg font-bold text-red-500">-{currentDeduction}</p>
+                        ) : (
+                          <p className="text-lg font-bold text-gray-300">0</p>
+                        )}
                       </div>
                     </div>
 
@@ -242,8 +248,7 @@ export default function ScoringForm() {
                         <span className="text-xl font-bold w-6 text-center text-gray-900">{currentMistakes}</span>
                         <button 
                           onClick={() => handleMistakeChange(criteria.id, 1)}
-                          disabled={currentScore === 0}
-                          className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-lg active:bg-gray-100 disabled:opacity-50 text-accent"
+                          className="w-10 h-10 flex items-center justify-center bg-white border border-gray-200 rounded-lg active:bg-gray-100 text-accent"
                         >
                           <Plus size={20} />
                         </button>
