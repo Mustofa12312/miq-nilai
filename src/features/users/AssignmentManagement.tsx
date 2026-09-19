@@ -10,7 +10,6 @@ export default function AssignmentManagement() {
   const [periods, setPeriods] = useState<ExamPeriod[]>([]);
   const [classes, setClasses] = useState<Class[]>([]);
   const [rantings, setRantings] = useState<Ranting[]>([]);
-  const [availableRooms, setAvailableRooms] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Form states
