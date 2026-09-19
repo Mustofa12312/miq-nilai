@@ -13,7 +13,7 @@ interface ReportData {
   grade: string;
   locked: boolean;
   created_at: string | null;
-  student: { full_name: string; class: { name: string; level: { name: string } } };
+  student: { id: number; nis: string | null; full_name: string; class: { name: string; level: { name: string } }; ranting: { code: string; name: string } | null };
   session: { examiner: { full_name: string }, period: { name: string } } | null;
   details: { mistakes: number; criteria: { name: string } }[] | null;
   is_missing?: boolean;
@@ -48,8 +48,10 @@ export default function ReportManagement() {
         .from('students')
         .select(`
           id,
+          nis,
           full_name,
           active,
+          ranting:rantings (code, name),
           class:classes (
             name,
             level:levels (name)
@@ -92,7 +94,7 @@ export default function ReportManagement() {
                 grade: score.grade,
                 locked: score.locked,
                 created_at: score.created_at,
-                student: { full_name: student.full_name, class: student.class },
+                student: { id: student.id, nis: student.nis, full_name: student.full_name, class: student.class, ranting: student.ranting },
                 session: score.session,
                 details: score.details,
                 is_missing: false
@@ -106,7 +108,7 @@ export default function ReportManagement() {
               grade: '-',
               locked: false,
               created_at: null,
-              student: { full_name: student.full_name, class: student.class },
+              student: { id: student.id, nis: student.nis, full_name: student.full_name, class: student.class, ranting: student.ranting },
               session: null,
               details: null,
               is_missing: true
@@ -149,6 +151,9 @@ export default function ReportManagement() {
     
     const exportData = filteredReports.map(r => {
       const baseRow: any = {
+        'ID / NIS': r.student?.nis || r.student?.id || '-',
+        'Kode Ranting': r.student?.ranting?.code || '-',
+        'Nama Ranting': r.student?.ranting?.name || '-',
         'Nama Santri': r.student?.full_name,
         'Tingkatan': r.student?.class?.level?.name,
         'Kelas': r.student?.class?.name,
@@ -193,6 +198,8 @@ export default function ReportManagement() {
 
     const tableData = filteredReports.map((r, index) => [
       index + 1,
+      r.student?.nis || r.student?.id || '-',
+      `${r.student?.ranting?.code || '-'} - ${r.student?.ranting?.name || '-'}`,
       r.student?.full_name || '-',
       `${r.student?.class?.name || '-'} (${r.student?.class?.level?.name || '-'})`,
       r.is_missing ? 'Belum' : (r.total_score ?? '-'),
@@ -201,7 +208,7 @@ export default function ReportManagement() {
     ]);
 
     autoTable(doc, {
-      head: [['No', 'Nama Santri', 'Kelas', 'Total Nilai', 'Predikat', 'Penguji']],
+      head: [['No', 'ID', 'Ranting', 'Nama Santri', 'Kelas', 'Total Nilai', 'Predikat', 'Penguji']],
       body: tableData,
       startY: 35,
       styles: { fontSize: 8, cellPadding: 3 },
@@ -290,6 +297,8 @@ export default function ReportManagement() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-sm text-gray-500 uppercase tracking-wider">
+                <th className="p-4 font-medium">ID / NIS</th>
+                <th className="p-4 font-medium">Ranting</th>
                 <th className="p-4 font-medium">Santri</th>
                 <th className="p-4 font-medium">Kelas</th>
                 <th className="p-4 font-medium text-center">Total Nilai</th>
@@ -302,11 +311,16 @@ export default function ReportManagement() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-gray-500">Memuat laporan...</td>
+                  <td colSpan={9} className="p-8 text-center text-gray-500">Memuat laporan...</td>
                 </tr>
               ) : filteredReports.length > 0 ? (
                 filteredReports.map((report) => (
                   <tr key={report.row_id} className="hover:bg-gray-50 transition-colors">
+                    <td className="p-4 text-gray-600">{report.student?.nis || report.student?.id}</td>
+                    <td className="p-4 text-gray-600">
+                      <div className="font-medium text-gray-900">{report.student?.ranting?.code || '-'}</div>
+                      <div className="text-xs">{report.student?.ranting?.name || '-'}</div>
+                    </td>
                     <td className="p-4 font-bold text-gray-900">{report.student?.full_name}</td>
                     <td className="p-4 text-gray-600">
                       {report.student?.class?.name} <span className="text-xs text-gray-400">({report.student?.class?.level?.name})</span>
@@ -359,7 +373,7 @@ export default function ReportManagement() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="p-8 text-center text-gray-500">
+                  <td colSpan={9} className="p-8 text-center text-gray-500">
                     Tidak ada laporan penilaian yang ditemukan.
                   </td>
                 </tr>
