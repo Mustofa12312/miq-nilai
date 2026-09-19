@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import type { Student, Class } from '../../types';
@@ -12,6 +12,9 @@ interface StudentWithStatus extends Student {
 export default function StudentList() {
   const navigate = useNavigate();
   const { classId } = useParams();
+  const [searchParams] = useSearchParams();
+  const assignmentIdParam = searchParams.get('assignmentId');
+  const assignmentId = assignmentIdParam ? Number(assignmentIdParam) : undefined;
   const { user } = useAuth();
 
   const [classInfo, setClassInfo] = useState<Class | null>(null);
@@ -25,7 +28,7 @@ export default function StudentList() {
     const fetchStudents = async () => {
       if (!classId || !user?.id) return;
       try {
-        const data = await fetchClassStudentsData(classId, user.id);
+        const data = await fetchClassStudentsData(classId, user.id, assignmentId);
         
         setClassInfo(data.classInfo);
         setActivePeriodId(data.activePeriodId);
@@ -50,7 +53,7 @@ export default function StudentList() {
     };
 
     fetchStudents();
-  }, [classId, user?.id]);
+  }, [classId, user?.id, assignmentId]);
 
   if (loading) return <div className="p-8 text-center">Memuat data santri...</div>;
 
@@ -62,6 +65,7 @@ export default function StudentList() {
   const scoringParams = new URLSearchParams();
   if (activePeriodId) scoringParams.set('periodId', String(activePeriodId));
   if (defaultExamTypeId) scoringParams.set('examTypeId', String(defaultExamTypeId));
+  if (assignmentId) scoringParams.set('assignmentId', String(assignmentId));
   const paramString = scoringParams.toString() ? `?${scoringParams.toString()}` : '';
 
   return (

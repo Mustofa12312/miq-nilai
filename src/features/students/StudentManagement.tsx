@@ -105,14 +105,53 @@ export default function StudentManagement() {
   // Helper: Parse date dari Excel (number atau string)
   const parseDate = (val: any): string | undefined => {
     if (!val) return undefined;
-    if (val instanceof Date) return val.toISOString().split('T')[0];
+    if (val instanceof Date) {
+      const offset = val.getTimezoneOffset() * 60000;
+      return new Date(val.getTime() - offset).toISOString().split('T')[0];
+    }
     if (typeof val === 'number') {
       // Excel serial date
       const excelEpoch = new Date(1899, 11, 30);
       const d = new Date(excelEpoch.getTime() + val * 86400000);
       return d.toISOString().split('T')[0];
     }
-    return String(val).trim() || undefined;
+
+    let str = String(val).trim();
+    if (!str) return undefined;
+
+    // Handle format "DD Bulan YYYY" (Bahasa Indonesia)
+    const idMonths: Record<string, string> = {
+      'januari': '01', 'jan': '01',
+      'februari': '02', 'feb': '02',
+      'maret': '03', 'mar': '03',
+      'april': '04', 'apr': '04',
+      'mei': '05',
+      'juni': '06', 'jun': '06',
+      'juli': '07', 'jul': '07',
+      'agustus': '08', 'agu': '08', 'agus': '08',
+      'september': '09', 'sep': '09', 'sept': '09',
+      'oktober': '10', 'okt': '10',
+      'november': '11', 'nov': '11',
+      'desember': '12', 'des': '12'
+    };
+
+    const match = str.match(/^(\d{1,2})[\s\-\/]+([a-zA-Z]+)[\s\-\/]+(\d{4})$/);
+    if (match) {
+      const day = match[1].padStart(2, '0');
+      const monthStr = match[2].toLowerCase();
+      const year = match[3];
+      const month = idMonths[monthStr];
+      if (month) return `${year}-${month}-${day}`;
+    }
+
+    // Try standard JS parse
+    const d = new Date(str);
+    if (!isNaN(d.getTime())) {
+      const offset = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - offset).toISOString().split('T')[0];
+    }
+
+    return undefined; // Jika format tidak dikenali, biarkan kosong agar tidak membuat error database
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

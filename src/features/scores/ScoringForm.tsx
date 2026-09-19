@@ -130,8 +130,17 @@ export default function ScoringForm() {
         
       if (sessionErr) throw sessionErr;
 
-      // 3. Create score — FIX: period_id dan exam_type_id disertakan, tetapi total_score & grade tidak dikirim. 
-      // Akan dihitung otomatis oleh Trigger Database setelah score_details di-insert.
+      // 3. Create score — FIX: mengirimkan total_score dan grade untuk memenuhi constraint NOT NULL, 
+      // nilai ini nantinya bisa ditimpa/dihitung ulang oleh Trigger Database jika ada.
+      
+      const getTempGrade = (score: number) => {
+        if (score >= 90) return 'A';
+        if (score >= 80) return 'B';
+        if (score >= 70) return 'C';
+        if (score >= 60) return 'D';
+        return 'E';
+      };
+
       const { data: scoreRec, error: scoreErr } = await supabase
         .from('scores')
         .upsert({
@@ -139,6 +148,8 @@ export default function ScoringForm() {
           student_id: parseInt(studentId),
           period_id: periodId,
           exam_type_id: examTypeId,
+          total_score: totalScore,
+          grade: getTempGrade(totalScore)
         })
         .select()
         .single();
