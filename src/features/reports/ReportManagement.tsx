@@ -13,7 +13,7 @@ interface ReportData {
   grade: string;
   locked: boolean;
   created_at: string | null;
-  student: { id: number; nis: string | null; full_name: string; class: { name: string; level: { name: string } }; ranting: { code: string; name: string } | null };
+  student: { id: number; nis: string | null; full_name: string; room?: string | null; class: { name: string; level: { name: string } }; ranting: { code: string; name: string } | null };
   session: { examiner: { full_name: string }, period: { name: string } } | null;
   details: { mistakes: number; criteria: { name: string } }[] | null;
   is_missing?: boolean;
@@ -26,22 +26,27 @@ export default function ReportManagement() {
 
   const [selectedClass, setSelectedClass] = useState('Semua Kelas');
   const [selectedLevel, setSelectedLevel] = useState('Semua Tingkatan');
+  const [selectedRoom, setSelectedRoom] = useState('Semua Ruangan');
 
   const [classes, setClasses] = useState<{name: string, level: {name: string}}[]>([]);
   const [levels, setLevels] = useState<{name: string}[]>([]);
+  const [criteriaList, setCriteriaList] = useState<{name: string}[]>([]);
 
   const fetchData = async () => {
     try {
-      // Fetch classes and levels first (these are simpler and less likely to fail)
-      const [classesRes, levelsRes] = await Promise.all([
+      // Fetch classes, levels, and criteria first (these are simpler and less likely to fail)
+      const [classesRes, levelsRes, criteriaRes] = await Promise.all([
         supabase.from('classes').select('name, level:levels(name)').order('name'),
-        supabase.from('levels').select('name').order('sort_order')
+        supabase.from('levels').select('name').order('sort_order'),
+        supabase.from('criteria').select('name').eq('active', true).order('sort_order')
       ]);
 
       if (classesRes.error) console.error('Classes fetch error:', classesRes.error);
       if (levelsRes.error) console.error('Levels fetch error:', levelsRes.error);
+      if (criteriaRes.error) console.error('Criteria fetch error:', criteriaRes.error);
       if (classesRes.data) setClasses(classesRes.data as any);
       if (levelsRes.data) setLevels(levelsRes.data);
+      if (criteriaRes.data) setCriteriaList(criteriaRes.data);
 
       // Fetch students with their scores to also show those who haven't taken exams
       const studentsRes = await supabase
@@ -51,6 +56,7 @@ export default function ReportManagement() {
           nis,
           full_name,
           active,
+          room,
           ranting:rantings (code, name),
           class:classes (
             name,
@@ -94,7 +100,7 @@ export default function ReportManagement() {
                 grade: score.grade,
                 locked: score.locked,
                 created_at: score.created_at,
-                student: { id: student.id, nis: student.nis, full_name: student.full_name, class: student.class, ranting: student.ranting },
+                student: { id: student.id, nis: student.nis, full_name: student.full_name, room: student.room, class: student.class, ranting: student.ranting },
                 session: score.session,
                 details: score.details,
                 is_missing: false
@@ -108,7 +114,7 @@ export default function ReportManagement() {
               grade: '-',
               locked: false,
               created_at: null,
-              student: { id: student.id, nis: student.nis, full_name: student.full_name, class: student.class, ranting: student.ranting },
+              student: { id: student.id, nis: student.nis, full_name: student.full_name, room: student.room, class: student.class, ranting: student.ranting },
               session: null,
               details: null,
               is_missing: true
@@ -128,22 +134,37 @@ export default function ReportManagement() {
     fetchData();
   }, []);
 
-  // Cascading dropdown logic: when level changes, reset class
+  // Cascading dropdown logic: when level changes, reset class and room
   useEffect(() => {
     setSelectedClass('Semua Kelas');
+    setSelectedRoom('Semua Ruangan');
   }, [selectedLevel]);
+
+  useEffect(() => {
+    setSelectedRoom('Semua Ruangan');
+  }, [selectedClass]);
 
   const uniqueLevels = levels.map(l => l.name);
   const filteredClassesList = selectedLevel === 'Semua Tingkatan' 
     ? classes 
     : classes.filter(c => c.level?.name === selectedLevel);
   const uniqueClasses = filteredClassesList.map(c => c.name);
+  
+  const availableRoomsForFilter = reports
+    .filter(r => (selectedLevel === 'Semua Tingkatan' || r.student?.class?.level?.name === selectedLevel))
+    .filter(r => (selectedClass === 'Semua Kelas' || r.student?.class?.name === selectedClass))
+    .map(r => r.student?.room)
+    .filter(Boolean);
+  
+  const uniqueRooms = Array.from(new Set(availableRoomsForFilter)) as string[];
+  uniqueRooms.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
   const filteredReports = reports.filter(r => {
     const matchSearch = r.student?.full_name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchClass = selectedClass === 'Semua Kelas' || r.student?.class?.name === selectedClass;
     const matchLevel = selectedLevel === 'Semua Tingkatan' || r.student?.class?.level?.name === selectedLevel;
-    return matchSearch && matchClass && matchLevel;
+    const matchRoom = selectedRoom === 'Semua Ruangan' || r.student?.room === selectedRoom;
+    return matchSearch && matchClass && matchLevel && matchRoom;
   });
 
   const handleExportExcel = () => {
@@ -157,16 +178,18 @@ export default function ReportManagement() {
         'Nama Santri': r.student?.full_name,
         'Tingkatan': r.student?.class?.level?.name,
         'Kelas': r.student?.class?.name,
+        'Ruangan': r.student?.room || '-',
       };
 
-      // Tambahkan kolom kesalahan berdasarkan kriteria
-      if (r.details && r.details.length > 0) {
-        r.details.forEach(d => {
-          if (d.criteria?.name) {
-            baseRow[`Salah ${d.criteria.name}`] = d.mistakes;
-          }
-        });
-      }
+      // Tambahkan kolom kesalahan berdasarkan urutan kriteria yang konsisten
+      criteriaList.forEach(c => {
+        if (r.is_missing) {
+          baseRow[`Salah ${c.name}`] = '-';
+        } else {
+          const detail = r.details?.find(d => d.criteria?.name === c.name);
+          baseRow[`Salah ${c.name}`] = detail ? detail.mistakes : 0;
+        }
+      });
 
       baseRow['Total Nilai'] = r.is_missing ? 'Belum Ujian' : r.total_score;
       baseRow['Predikat'] = r.is_missing ? 'Belum Ujian' : r.grade;
@@ -202,13 +225,14 @@ export default function ReportManagement() {
       `${r.student?.ranting?.code || '-'} - ${r.student?.ranting?.name || '-'}`,
       r.student?.full_name || '-',
       `${r.student?.class?.name || '-'} (${r.student?.class?.level?.name || '-'})`,
+      r.student?.room || '-',
       r.is_missing ? 'Belum' : (r.total_score ?? '-'),
       r.is_missing ? 'Belum Ujian' : (r.grade || '-'),
       r.is_missing ? '-' : (r.session?.examiner?.full_name || '-')
     ]);
 
     autoTable(doc, {
-      head: [['No', 'ID', 'Ranting', 'Nama Santri', 'Kelas', 'Total Nilai', 'Predikat', 'Penguji']],
+      head: [['No', 'ID', 'Ranting', 'Nama Santri', 'Kelas', 'Ruangan', 'Total Nilai', 'Predikat', 'Penguji']],
       body: tableData,
       startY: 35,
       styles: { fontSize: 8, cellPadding: 3 },
@@ -286,6 +310,17 @@ export default function ReportManagement() {
             <option value="Semua Kelas">Semua Kelas</option>
             {uniqueClasses.map(cls => (
               <option key={cls} value={cls}>{cls}</option>
+            ))}
+          </select>
+          
+          <select 
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none text-gray-700 min-w-[140px]"
+            value={selectedRoom}
+            onChange={(e) => setSelectedRoom(e.target.value)}
+          >
+            <option value="Semua Ruangan">Semua Ruangan</option>
+            {uniqueRooms.map(room => (
+              <option key={room} value={room}>{room}</option>
             ))}
           </select>
         </div>
