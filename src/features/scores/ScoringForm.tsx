@@ -16,6 +16,7 @@ export default function ScoringForm() {
   // Jika tidak ada di URL, akan di-resolve dari database di dalam handleSave
   const urlPeriodId = searchParams.get('periodId') ? Number(searchParams.get('periodId')) : null;
   const urlExamTypeId = searchParams.get('examTypeId') ? Number(searchParams.get('examTypeId')) : null;
+  const urlAssignmentId = searchParams.get('assignmentId') ? Number(searchParams.get('assignmentId')) : null;
 
   const [student, setStudent] = useState<Student | null>(null);
   const [criteriaList, setCriteriaList] = useState<Criteria[]>([]);
@@ -87,13 +88,18 @@ export default function ScoringForm() {
         examTypeId = defaultExamType.id;
       }
 
-      const { data: assignment } = await supabase
+      let assignmentQuery = supabase
         .from('examiner_assignments')
         .select('id')
         .eq('examiner_id', user.id)
         .eq('class_id', parseInt(classId))
-        .eq('period_id', periodId)
-        .maybeSingle();
+        .eq('period_id', periodId);
+
+      if (urlAssignmentId) {
+        assignmentQuery = assignmentQuery.eq('id', urlAssignmentId);
+      }
+
+      const { data: assignment } = await assignmentQuery.limit(1).maybeSingle();
 
       if (!assignment) {
         throw new Error("Anda tidak ditugaskan menilai kelas ini pada periode ujian yang dipilih.");
