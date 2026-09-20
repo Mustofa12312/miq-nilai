@@ -47,6 +47,8 @@ export default function AdminDashboard() {
   const [recentScores, setRecentScores] = useState<RecentScore[]>([]);
   const [topStudents, setTopStudents] = useState<TopStudent[]>([]);
   const [examinerActivities, setExaminerActivities] = useState<ExaminerActivity[]>([]);
+  const [inactiveExaminers, setInactiveExaminers] = useState<{examiner_name: string}[]>([]);
+  const [examinerTab, setExaminerTab] = useState<'active' | 'inactive'>('active');
   const [gradeDistribution, setGradeDistribution] = useState<{ grade: string; count: number }[]>([]);
 
   useEffect(() => {
@@ -60,7 +62,7 @@ export default function AdminDashboard() {
           supabase.from('students').select('*', { count: 'exact', head: true }).eq('active', true),
           supabase.from('scores').select('*', { count: 'exact', head: true }),
           supabase.from('classes').select('*', { count: 'exact', head: true }),
-          supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'examiner'),
+          supabase.from('profiles').select('id, full_name', { count: 'exact' }).eq('role', 'examiner'),
           supabase.from('levels').select('*', { count: 'exact', head: true }),
           supabase.from('exam_periods').select('name').eq('active', true).limit(1).single(),
         ]);
@@ -124,22 +126,33 @@ export default function AdminDashboard() {
           })));
         }
 
-        // Examiner activity (most scores)
+        // Examiner activity (most scores and inactive)
         const { data: examinerData } = await supabase
           .from('score_sessions')
-          .select('examiner:profiles(full_name), id');
-        if (examinerData) {
+          .select('examiner_id, examiner:profiles(full_name), id');
+          
+        if (examinerData && examinersRes.data) {
           const countMap: Record<string, number> = {};
+          const activeExaminerIds = new Set<string>();
+          
           examinerData.forEach((s: any) => {
             const name = s.examiner?.full_name || 'Unknown';
             countMap[name] = (countMap[name] || 0) + 1;
+            if (s.examiner_id) activeExaminerIds.add(s.examiner_id);
           });
+          
           setExaminerActivities(
             Object.entries(countMap)
               .map(([examiner_name, total_scored]) => ({ examiner_name, total_scored }))
               .sort((a, b) => b.total_scored - a.total_scored)
-              .slice(0, 5)
           );
+          
+          const inactive = examinersRes.data
+            .filter(e => !activeExaminerIds.has(e.id))
+            .map(e => ({ examiner_name: e.full_name }))
+            .sort((a, b) => a.examiner_name.localeCompare(b.examiner_name));
+            
+          setInactiveExaminers(inactive);
         }
       } catch (error) {
         console.error('Error fetching dashboard:', error);
@@ -412,28 +425,71 @@ export default function AdminDashboard() {
 
           {/* Examiner Activity */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex items-center gap-2">
-              <CheckCircle2 size={18} className="text-teal-500" />
-              <h3 className="font-bold text-gray-900">Aktivitas Penguji</h3>
-            </div>
-            {examinerActivities.length > 0 ? (
-              <div className="divide-y divide-gray-50">
-                {examinerActivities.map((ea, i) => (
-                  <div key={i} className="px-5 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xs">
-                        {ea.examiner_name.charAt(0)}
-                      </div>
-                      <p className="font-medium text-gray-900 text-sm">{ea.examiner_name}</p>
-                    </div>
-                    <span className="text-xs font-semibold bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full">
-                      {ea.total_scored} sesi
-                    </span>
-                  </div>
-                ))}
+            <div className="p-5 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} className="text-teal-500" />
+                <h3 className="font-bold text-gray-900">Aktivitas Penguji</h3>
               </div>
+              <div className="flex bg-gray-100 p-1 rounded-lg">
+                <button 
+                  onClick={() => setExaminerTab('active')} 
+                  className={`text-[11px] px-3 py-1 rounded-md font-medium transition-colors ${examinerTab === 'active' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Teraktif
+                </button>
+                <button 
+                  onClick={() => setExaminerTab('inactive')} 
+                  className={`text-[11px] px-3 py-1 rounded-md font-medium transition-colors ${examinerTab === 'inactive' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Belum Input
+                </button>
+              </div>
+            </div>
+            
+            {examinerTab === 'active' ? (
+              examinerActivities.length > 0 ? (
+                <div className="divide-y divide-gray-50 max-h-[300px] overflow-y-auto">
+                  {examinerActivities.map((ea, i) => (
+                    <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-teal-100 flex items-center justify-center text-teal-700 font-bold text-xs">
+                          {ea.examiner_name.charAt(0)}
+                        </div>
+                        <p className="font-medium text-gray-900 text-sm">{ea.examiner_name}</p>
+                      </div>
+                      <span className="text-xs font-semibold bg-teal-50 text-teal-700 px-2.5 py-1 rounded-full">
+                        {ea.total_scored} sesi
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-400 text-sm">Belum ada aktivitas</div>
+              )
             ) : (
-              <div className="p-6 text-center text-gray-400 text-sm">Belum ada aktivitas</div>
+              inactiveExaminers.length > 0 ? (
+                <div className="divide-y divide-gray-50 max-h-[300px] overflow-y-auto">
+                  {inactiveExaminers.map((ea, i) => (
+                    <div key={i} className="px-5 py-3 flex items-center justify-between hover:bg-gray-50/50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center text-red-600 font-bold text-xs">
+                          {ea.examiner_name.charAt(0)}
+                        </div>
+                        <p className="font-medium text-gray-900 text-sm">{ea.examiner_name}</p>
+                      </div>
+                      <span className="text-xs font-semibold bg-red-50 text-red-600 px-2.5 py-1 rounded-full flex items-center gap-1">
+                        <AlertCircle size={12} />
+                        Belum Input
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-6 text-center text-gray-400 text-sm flex flex-col items-center gap-2">
+                  <CheckCircle2 size={24} className="text-teal-400" />
+                  <p>Semua penguji sudah input nilai!</p>
+                </div>
+              )
             )}
           </div>
         </div>
