@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Users, BookOpen, Settings, LogOut,
-  FileText, UserCog, Menu, X, ChevronRight, CheckSquare, Layers, Building2
+  FileText, UserCog, Menu, X, ChevronRight, CheckSquare, Layers, Building2, Activity
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -14,6 +14,7 @@ const navItems = [
   { to: '/admin/classes', icon: BookOpen, label: 'Kelas' },
   { to: '/admin/exams', icon: Settings, label: 'Ujian' },
   { to: '/admin/assignments', icon: Users, label: 'Plotting' },
+  { to: '/admin/activity', icon: Activity, label: 'Aktivitas Penguji' },
   { to: '/admin/verification', icon: CheckSquare, label: 'Verifikasi' },
   { to: '/admin/reports', icon: FileText, label: 'Laporan' },
   { to: '/admin/users', icon: UserCog, label: 'Pengguna' },
