@@ -102,53 +102,86 @@ export default function StudentManagement() {
     return s;
   };
 
-  // Helper: Parse date dari Excel (number atau string)
+  // Helper: Parse date dari Excel (number, Date, atau string)
   const parseDate = (val: any): string | undefined => {
     if (!val) return undefined;
+
+    // 1. Jika bertipe Date
     if (val instanceof Date) {
-      const offset = val.getTimezoneOffset() * 60000;
-      return new Date(val.getTime() - offset).toISOString().split('T')[0];
-    }
-    if (typeof val === 'number') {
-      // Excel serial date
-      const excelEpoch = new Date(1899, 11, 30);
-      const d = new Date(excelEpoch.getTime() + val * 86400000);
+      if (isNaN(val.getTime())) return undefined;
+      // Kompensasi selisih timezone/offset SheetJS dengan offset setengah hari
+      const d = new Date(val.getTime() + 12 * 3600 * 1000);
       return d.toISOString().split('T')[0];
     }
 
-    let str = String(val).trim();
+    const str = String(val).trim();
     if (!str) return undefined;
 
-    // Handle format "DD Bulan YYYY" (Bahasa Indonesia)
-    const idMonths: Record<string, string> = {
-      'januari': '01', 'jan': '01',
-      'februari': '02', 'feb': '02',
-      'maret': '03', 'mar': '03',
-      'april': '04', 'apr': '04',
-      'mei': '05',
-      'juni': '06', 'jun': '06',
-      'juli': '07', 'jul': '07',
-      'agustus': '08', 'agu': '08', 'agus': '08',
-      'september': '09', 'sep': '09', 'sept': '09',
-      'oktober': '10', 'okt': '10',
-      'november': '11', 'nov': '11',
-      'desember': '12', 'des': '12'
+    // 2. Jika angka murni (Excel serial number atau 4-digit tahun)
+    if (/^\d+(\.\d+)?$/.test(str)) {
+      const num = Number(str);
+      // Jika hanya tahun 4-digit (misal 2012)
+      if (num >= 1900 && num <= 2100 && /^\d{4}$/.test(str)) {
+        return `${num}-01-01`;
+      }
+      // Jika Excel serial date (angka serial ~1000 sampai 80000)
+      if (num >= 1000 && num <= 80000) {
+        try {
+          const p = XLSX.SSF.parse_date_code(num);
+          if (p && p.y && p.m && p.d) {
+            return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
+          }
+        } catch {
+          // Abaikan jika gagal decode SSF
+        }
+      }
+    }
+
+    // 3. Format nama bulan (Indonesia & Inggris), contoh: "15 Oktober 2012" atau "15 October 2012"
+    const months: Record<string, string> = {
+      januari: '01', jan: '01', january: '01',
+      februari: '02', feb: '02', february: '02',
+      maret: '03', mar: '03', march: '03',
+      april: '04', apr: '04',
+      mei: '05', may: '05',
+      juni: '06', jun: '06', june: '06',
+      juli: '07', jul: '07', july: '07',
+      agustus: '08', agu: '08', agus: '08', august: '08',
+      september: '09', sep: '09', sept: '09',
+      oktober: '10', okt: '10', october: '10',
+      november: '11', nov: '11',
+      desember: '12', des: '12', december: '12'
     };
 
-    const match = str.match(/^(\d{1,2})[\s\-\/]+([a-zA-Z]+)[\s\-\/]+(\d{4})$/);
-    if (match) {
-      const day = match[1].padStart(2, '0');
-      const monthStr = match[2].toLowerCase();
-      const year = match[3];
-      const month = idMonths[monthStr];
+    const wordMonthMatch = str.match(/^(\d{1,2})[\s\-\/\.]*([a-zA-Z]+)[\s\-\/\.]*(\d{4})$/);
+    if (wordMonthMatch) {
+      const day = wordMonthMatch[1].padStart(2, '0');
+      const mStr = wordMonthMatch[2].toLowerCase();
+      const year = wordMonthMatch[3];
+      const month = months[mStr];
       if (month) return `${year}-${month}-${day}`;
     }
 
-    // Try standard JS parse
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) {
-      const offset = d.getTimezoneOffset() * 60000;
-      return new Date(d.getTime() - offset).toISOString().split('T')[0];
+    // 4. Format DD/MM/YYYY, DD-MM-YYYY, atau DD.MM.YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+    if (dmyMatch) {
+      const day = dmyMatch[1].padStart(2, '0');
+      const month = dmyMatch[2].padStart(2, '0');
+      const year = dmyMatch[3];
+      if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
+        return `${year}-${month}-${day}`;
+      }
+    }
+
+    // 5. Format YYYY-MM-DD atau YYYY/MM/DD
+    const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+    if (ymdMatch) {
+      const year = ymdMatch[1];
+      const month = ymdMatch[2].padStart(2, '0');
+      const day = ymdMatch[3].padStart(2, '0');
+      if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
+        return `${year}-${month}-${day}`;
+      }
     }
 
     return undefined; // Jika format tidak dikenali, biarkan kosong agar tidak membuat error database
@@ -205,8 +238,8 @@ export default function StudentManagement() {
         // Validate each row
         const parsed: ImportRow[] = rows
           .filter((row: any) => {
-            const name = row['Nama'] || row['nama'] || row['full_name'] || '';
-            return String(name).trim() !== '';
+            const name = String(row['Nama'] || row['nama'] || row['full_name'] || '').trim();
+            return name !== '' && name.toLowerCase() !== 'nama';
           })
           .map((row: any) => {
             const name = String(row['Nama'] || row['nama'] || row['full_name'] || '').trim();

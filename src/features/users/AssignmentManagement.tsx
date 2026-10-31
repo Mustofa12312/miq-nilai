@@ -24,6 +24,8 @@ export default function AssignmentManagement() {
 
   // Form states
   const [showModal, setShowModal] = useState(false);
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({
@@ -198,6 +200,26 @@ export default function AssignmentManagement() {
     }
   };
 
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      const { error } = await supabase
+        .from('examiner_assignments')
+        .delete()
+        .gt('id', 0);
+      
+      if (error) throw error;
+      toast.success('Semua data plotting berhasil dihapus');
+      setShowDeleteAllModal(false);
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Gagal menghapus: ' + err.message);
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   const handleEdit = (a: any) => {
     setEditingId(a.id);
     setForm({
@@ -220,13 +242,24 @@ export default function AssignmentManagement() {
           <h2 className="text-2xl font-bold text-gray-900">Plotting Penguji</h2>
           <p className="text-gray-500">Tugaskan penguji ke kelas dan ruangan santri.</p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
-        >
-          <Plus size={18} />
-          Tugaskan Penguji
-        </button>
+        <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => setShowDeleteAllModal(true)}
+            disabled={assignments.length === 0}
+            className="flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title={assignments.length === 0 ? 'Belum ada data penugasan untuk dihapus' : 'Hapus semua plotting penguji'}
+          >
+            <Trash2 size={18} />
+            Hapus Semua
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
+          >
+            <Plus size={18} />
+            Tugaskan Penguji
+          </button>
+        </div>
       </div>
 
       {/* Tabel */}
@@ -423,6 +456,40 @@ export default function AssignmentManagement() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Hapus Semua */}
+      {showDeleteAllModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="p-6 text-center">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Semua Plotting?</h3>
+              <p className="text-gray-500 mb-6">
+                Anda yakin ingin menghapus <strong>seluruh data penugasan/plotting penguji</strong> ({assignments.length} penugasan)? Tindakan ini tidak dapat dibatalkan.
+              </p>
+              
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowDeleteAllModal(false)}
+                  disabled={isDeletingAll}
+                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  onClick={handleDeleteAll}
+                  disabled={isDeletingAll}
+                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
+                >
+                  {isDeletingAll ? <Loader2 size={18} className="animate-spin" /> : 'Ya, Hapus Semua'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

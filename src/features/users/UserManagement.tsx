@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Plus, Eye, EyeOff, Loader2, UserCheck, Mail, Key, User, Trash2, Download, Upload } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useAuth } from '../../contexts/AuthContext';
 import type { Profile } from '../../types';
 
 export default function UserManagement() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<Profile[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -263,14 +265,23 @@ export default function UserManagement() {
                     </span>
                   </td>
                   <td className="p-4 text-right">
-                    <button
-                      onClick={() => handleDelete(u.id, u.full_name)}
-                      disabled={deletingId === u.id}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                      title="Hapus Pengguna"
-                    >
-                      {deletingId === u.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
-                    </button>
+                    {u.id === currentUser?.id || u.role === 'super_admin' ? (
+                      <span
+                        className="p-2 text-gray-300 inline-block cursor-not-allowed"
+                        title={u.role === 'super_admin' ? 'Akun Super Admin tidak dapat dihapus' : 'Tidak dapat menghapus akun sendiri'}
+                      >
+                        <Trash2 size={18} />
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleDelete(u.id, u.full_name)}
+                        disabled={deletingId === u.id}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                        title="Hapus Pengguna"
+                      >
+                        {deletingId === u.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

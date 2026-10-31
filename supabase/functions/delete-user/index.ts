@@ -61,7 +61,21 @@ serve(async (req: Request) => {
 
     // Prevent deleting oneself
     if (user_id === callerUser.id) {
-      return new Response(JSON.stringify({ error: "Cannot delete your own account" }), {
+      return new Response(JSON.stringify({ error: "Tidak dapat menghapus akun Anda sendiri." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Prevent deleting super_admin
+    const { data: targetProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", user_id)
+      .single();
+
+    if (targetProfile?.role === "super_admin") {
+      return new Response(JSON.stringify({ error: "Akun Super Admin tidak dapat dihapus." }), {
         status: 400,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
