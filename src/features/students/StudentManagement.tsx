@@ -1,5 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Plus, Upload, FileSpreadsheet, X, CheckCircle, AlertCircle, Loader2, Download, FileDown, Trash2 } from 'lucide-react';
+import {
+  Search, Plus, Upload, FileSpreadsheet, X, CheckCircle,
+  AlertCircle, Loader2, Download, FileDown, Trash2,
+  Edit2, ChevronLeft, ChevronRight, Building2, BookOpen
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
@@ -22,7 +26,7 @@ interface ImportRow {
   birth_place?: string;
   birth_date?: string;
   class_name?: string;
-  tingkat?: string;  // ULA / Wustho / etc.
+  tingkat?: string;
   class_id?: number;
   ranting_id?: number | null;
   room?: string;
@@ -37,11 +41,15 @@ export default function StudentManagement() {
   const [levels, setLevels] = useState<Level[]>([]);
   const [rantings, setRantings] = useState<Ranting[]>([]);
   const [loading, setLoading] = useState(true);
-  
+
   // Filters
   const [filterLevel, setFilterLevel] = useState<string>('all');
   const [filterClass, setFilterClass] = useState<string>('all');
-  
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
+
   // Import state
   const [showImportModal, setShowImportModal] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
@@ -54,16 +62,16 @@ export default function StudentManagement() {
 
   // Single student form state
   const [showStudentModal, setShowStudentModal] = useState(false);
-  const [studentForm, setStudentForm] = useState({ 
-    id: 0, 
+  const [studentForm, setStudentForm] = useState({
+    id: 0,
     nis: '',
-    full_name: '', 
+    full_name: '',
     gender: 'L',
     father_name: '',
     branch_code: '',
     branch_name: '',
-    class_id: 0, 
-    active: true 
+    class_id: 0,
+    active: true
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -78,7 +86,7 @@ export default function StudentManagement() {
       ]);
       if (studentsRes.data) setStudents(studentsRes.data as any);
       if (classesRes.data) {
-        const sortedClasses = [...classesRes.data].sort((a, b) => 
+        const sortedClasses = [...classesRes.data].sort((a, b) =>
           a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
         );
         setClasses(sortedClasses);
@@ -90,10 +98,16 @@ export default function StudentManagement() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterLevel, filterClass]);
 
   // -- IMPORT LOGIC --
-  // Helper: Normalize kelas value (VI -> 6, 'VI ' -> 6, dll)
   const normalizeKelas = (val: any): string => {
     const s = String(val).trim();
     const romanMap: Record<string, string> = { I: '1', II: '2', III: '3', IV: '4', V: '5', VI: '6', VII: '7' };
@@ -102,14 +116,11 @@ export default function StudentManagement() {
     return s;
   };
 
-  // Helper: Parse date dari Excel (number, Date, atau string)
   const parseDate = (val: any): string | undefined => {
     if (!val) return undefined;
 
-    // 1. Jika bertipe Date
     if (val instanceof Date) {
       if (isNaN(val.getTime())) return undefined;
-      // Kompensasi selisih timezone/offset SheetJS dengan offset setengah hari
       const d = new Date(val.getTime() + 12 * 3600 * 1000);
       return d.toISOString().split('T')[0];
     }
@@ -117,27 +128,21 @@ export default function StudentManagement() {
     const str = String(val).trim();
     if (!str) return undefined;
 
-    // 2. Jika angka murni (Excel serial number atau 4-digit tahun)
     if (/^\d+(\.\d+)?$/.test(str)) {
       const num = Number(str);
-      // Jika hanya tahun 4-digit (misal 2012)
       if (num >= 1900 && num <= 2100 && /^\d{4}$/.test(str)) {
         return `${num}-01-01`;
       }
-      // Jika Excel serial date (angka serial ~1000 sampai 80000)
       if (num >= 1000 && num <= 80000) {
         try {
           const p = XLSX.SSF.parse_date_code(num);
           if (p && p.y && p.m && p.d) {
             return `${p.y}-${String(p.m).padStart(2, '0')}-${String(p.d).padStart(2, '0')}`;
           }
-        } catch {
-          // Abaikan jika gagal decode SSF
-        }
+        } catch {}
       }
     }
 
-    // 3. Format nama bulan (Indonesia & Inggris), contoh: "15 Oktober 2012" atau "15 October 2012"
     const months: Record<string, string> = {
       januari: '01', jan: '01', january: '01',
       februari: '02', feb: '02', february: '02',
@@ -153,173 +158,145 @@ export default function StudentManagement() {
       desember: '12', des: '12', december: '12'
     };
 
-    const wordMonthMatch = str.match(/^(\d{1,2})[\s\-\/\.]*([a-zA-Z]+)[\s\-\/\.]*(\d{4})$/);
-    if (wordMonthMatch) {
-      const day = wordMonthMatch[1].padStart(2, '0');
-      const mStr = wordMonthMatch[2].toLowerCase();
-      const year = wordMonthMatch[3];
-      const month = months[mStr];
-      if (month) return `${year}-${month}-${day}`;
+    const textDateMatch = str.match(/^(\d{1,2})[\s\-]+([a-zA-Z]+)[\s\-]+(\d{4})$/);
+    if (textDateMatch) {
+      const day = textDateMatch[1].padStart(2, '0');
+      const monName = textDateMatch[2].toLowerCase();
+      const year = textDateMatch[3];
+      if (months[monName]) {
+        return `${year}-${months[monName]}-${day}`;
+      }
     }
 
-    // 4. Format DD/MM/YYYY, DD-MM-YYYY, atau DD.MM.YYYY
-    const dmyMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+    const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (dmyMatch) {
-      const day = dmyMatch[1].padStart(2, '0');
-      const month = dmyMatch[2].padStart(2, '0');
-      const year = dmyMatch[3];
-      if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
-        return `${year}-${month}-${day}`;
-      }
+      return `${dmyMatch[3]}-${dmyMatch[2].padStart(2, '0')}-${dmyMatch[1].padStart(2, '0')}`;
     }
 
-    // 5. Format YYYY-MM-DD atau YYYY/MM/DD
-    const ymdMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+    const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
     if (ymdMatch) {
-      const year = ymdMatch[1];
-      const month = ymdMatch[2].padStart(2, '0');
-      const day = ymdMatch[3].padStart(2, '0');
-      if (Number(month) >= 1 && Number(month) <= 12 && Number(day) >= 1 && Number(day) <= 31) {
-        return `${year}-${month}-${day}`;
-      }
+      return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
     }
 
-    return undefined; // Jika format tidak dikenali, biarkan kosong agar tidak membuat error database
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+
+    return undefined;
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
+    setImportLoading(true);
     setImportError('');
     setImportDone(false);
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
-        const data = new Uint8Array(evt.target!.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const bstr = evt.target?.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const rawData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-        // Auto-detect: cari baris header (ada kolom "Nama" atau "No")
-        // Sheet mungkin punya 3-4 baris judul sebelum data
-        const rawRows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
-        
-        // Coba format standar dulu (header di baris pertama)
-        let rows = rawRows;
-        
-        // Jika header utama bukan kolom data, coba skip baris awal (format ranting.xlsx)
-        const isRantingFormat = rawRows.length > 0 && (
-          rawRows[0]['No'] !== undefined || rawRows[0]['Kode Ranting'] !== undefined
-        );
-
-        if (!isRantingFormat) {
-          // Coba baca dengan skipRows untuk menghindari baris judul
-          const rawAll: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
-          // Cari index baris yang mengandung 'Nama'
-          const headerRowIndex = rawAll.findIndex(r => 
-            r.some(cell => String(cell).toLowerCase() === 'nama')
-          );
-          if (headerRowIndex >= 0) {
-            const headers = rawAll[headerRowIndex] as string[];
-            rows = rawAll.slice(headerRowIndex + 1).map(r => {
-              const obj: any = {};
-              headers.forEach((h, i) => { obj[h] = r[i] ?? ''; });
-              return obj;
-            }).filter(r => r['Nama'] || r['nama']);
-          }
-        }
-
-        if (rows.length === 0) {
+        if (rawData.length === 0) {
           setImportError('File kosong atau format tidak sesuai.');
+          setImportLoading(false);
           return;
         }
 
-        // Validate each row
-        const parsed: ImportRow[] = rows
-          .filter((row: any) => {
-            const name = String(row['Nama'] || row['nama'] || row['full_name'] || '').trim();
-            return name !== '' && name.toLowerCase() !== 'nama';
-          })
-          .map((row: any) => {
-            const name = String(row['Nama'] || row['nama'] || row['full_name'] || '').trim();
-            const rawKelas = row['Kelas'] || row['kelas'] || row['class_name'] || '';
-            const kelas = normalizeKelas(rawKelas);
-            const tingkat = String(row['Tingkat'] || row['tingkat'] || '').trim();
-            const gender = String(row['L/P'] || row['JK'] || row['jk'] || 'L').trim().toUpperCase();
-            const fatherName = String(row['Nama Ayah'] || row['nama_ayah'] || '').trim();
-            const branchCode = String(row['Kode Ranting'] || row['kode_ranting'] || '').trim().toUpperCase();
-            const branchName = String(row['Nama Ranting'] || row['nama_ranting'] || '').trim();
-            const birthPlace = String(row['Tempat Lahir'] || row['tempat_lahir'] || '').trim();
-            const birthDateRaw = row['Tanggal Lahir'] || row['tanggal_lahir'];
-            const birthDate = parseDate(birthDateRaw);
-            const room = String(row['Ruangan'] || row['Ruang'] || row['Halaqoh'] || row['ruangan'] || '').trim();
+        const classMap = new Map(classes.map(c => [c.name.toLowerCase().trim(), c.id]));
+        const rantingMap = new Map(rantings.map(r => [r.code.toLowerCase().trim(), r.id]));
 
-            if (!name) return { full_name: name, status: 'error', error: 'Nama kosong' };
-            if (!kelas) return { full_name: name, status: 'error', error: 'Kelas kosong' };
+        const rows: ImportRow[] = rawData.map((row) => {
+          const findKey = (candidates: string[]) => {
+            const found = Object.keys(row).find(k =>
+              candidates.includes(k.toLowerCase().trim().replace(/[\s_\.]/g, ''))
+            );
+            return found ? String(row[found]).trim() : '';
+          };
 
-            // Cari kelas yang cocok berdasarkan: nama kelas = kelas, dan nama tingkat = level name
-            let foundClass = classes.find(c => {
-              const nameMatch = c.name.toLowerCase() === kelas.toLowerCase();
-              if (!tingkat) return nameMatch;
-              const level = levels.find(l => l.id === c.level_id);
-              const levelMatch = level?.name?.toLowerCase().includes(tingkat.toLowerCase()) ||
-                level?.name?.toLowerCase() === tingkat.toLowerCase();
-              return nameMatch && levelMatch;
-            });
+          const rawNo = findKey(['no', 'nomor']);
+          const rawNis = findKey(['nis', 'noinduk', 'nomorinduk', 'nisn']);
+          const rawName = findKey(['nama', 'namasantri', 'namalengkap', 'fullname', 'name']);
+          const rawGender = findKey(['lp', 'jk', 'jeniskelamin', 'gender', 'sex']).toUpperCase();
+          const rawFather = findKey(['namaayah', 'ayah', 'bapak', 'walisantri', 'wali', 'fathername', 'father']);
+          const rawBranchCode = findKey(['koderanting', 'kodecabang', 'branchcode', 'kd_ranting']);
+          const rawBranchName = findKey(['namaranting', 'ranting', 'cabang', 'branchname', 'branch', 'subbranch']);
+          const rawBirthPlace = findKey(['tempatlahir', 'tmplahir', 'birthplace']);
+          const rawBirthDate = findKey(['tanggallahir', 'tgllahir', 'birthdate']);
+          const rawKelas = findKey(['kelas', 'kls', 'class', 'classname']);
+          const rawTingkat = findKey(['tingkat', 'tingkatan', 'jenjang', 'level']).toUpperCase();
+          const rawRoom = findKey(['ruang', 'ruangan', 'room']);
 
-            // Jika tidak ketemu dengan tingkat, coba tanpa filter tingkat
-            if (!foundClass) {
-              foundClass = classes.find(c => c.name.toLowerCase() === kelas.toLowerCase());
+          let gender: 'L' | 'P' = 'L';
+          if (rawGender === 'P' || rawGender.startsWith('PEREMPUAN') || rawGender.startsWith('WANITA')) {
+            gender = 'P';
+          }
+
+          let classId: number | undefined;
+          let matchedClassName = rawKelas;
+
+          if (rawKelas) {
+            const normKelas = normalizeKelas(rawKelas);
+            const tryKeys = [
+              `${normKelas} ${rawTingkat}`.toLowerCase().trim(),
+              `${rawTingkat} ${normKelas}`.toLowerCase().trim(),
+              normKelas.toLowerCase().trim(),
+              rawKelas.toLowerCase().trim(),
+            ];
+            for (const key of tryKeys) {
+              if (classMap.has(key)) {
+                classId = classMap.get(key);
+                matchedClassName = key.toUpperCase();
+                break;
+              }
             }
+          }
 
-            // Cari ranting
-            let foundRanting = rantings.find(r => r.code === branchCode);
-            const rantingId = foundRanting?.id ?? null;
+          let rantingId: number | null = null;
+          if (rawBranchCode && rantingMap.has(rawBranchCode.toLowerCase())) {
+            rantingId = rantingMap.get(rawBranchCode.toLowerCase()) || null;
+          }
 
-            // Auto-generate NIS dari kode ranting + nomor urut jika kosong
-            const rawNis = String(row['NIS'] || row['nis'] || row['ID'] || '').trim();
-            const nis = rawNis || undefined; // biarkan undefined, bisa di-generate saat import
+          let errorMsg = '';
+          if (!rawName) errorMsg = 'Nama wajib diisi.';
+          else if (!classId) errorMsg = `Kelas "${rawKelas || 'kosong'}" tidak ditemukan.`;
 
-            if (!foundClass) {
-              return {
-                full_name: name,
-                class_name: kelas,
-                tingkat,
-                status: 'error',
-                error: `Kelas "${kelas}" (${tingkat}) belum ada di sistem — buat dulu di menu Kelas`,
-                branch_code: branchCode,
-                branch_name: branchName,
-              };
-            }
+          return {
+            no: rawNo ? parseInt(rawNo) : undefined,
+            nis: rawNis,
+            full_name: rawName,
+            gender,
+            father_name: rawFather,
+            branch_code: rawBranchCode,
+            branch_name: rawBranchName,
+            birth_place: rawBirthPlace,
+            birth_date: parseDate(rawBirthDate),
+            class_name: matchedClassName,
+            tingkat: rawTingkat,
+            class_id: classId,
+            ranting_id: rantingId,
+            room: rawRoom,
+            status: errorMsg ? 'error' : 'valid',
+            error: errorMsg,
+          };
+        });
 
-            return {
-              full_name: name,
-              nis,
-              gender: gender === 'P' ? 'P' : 'L',
-              father_name: fatherName,
-              birth_place: birthPlace,
-              birth_date: birthDate,
-              branch_code: branchCode,
-              branch_name: branchName,
-              class_name: kelas,
-              tingkat,
-              class_id: foundClass.id,
-              ranting_id: rantingId,
-              room,
-              status: 'valid',
-            };
-          });
-
-        setImportRows(parsed);
+        setImportRows(rows);
         setShowImportModal(true);
-      } catch (err) {
-        console.error('Import error:', err);
-        setImportError('Gagal membaca file. Pastikan format Excel (.xlsx) atau CSV.');
+      } catch (err: any) {
+        setImportError(`Gagal membaca file: ${err.message}`);
+      } finally {
+        setImportLoading(false);
+        if (fileRef.current) fileRef.current.value = '';
       }
     };
-    reader.readAsArrayBuffer(file);
-    e.target.value = '';
+    reader.readAsBinaryString(file);
   };
 
   const handleImport = async () => {
@@ -329,24 +306,25 @@ export default function StudentManagement() {
     setImportLoading(true);
     setImportError('');
     try {
-      // Step 1: Auto-create rantings yang belum ada
-      const newRantingCodes = [...new Set(
-        validRows
-          .filter(r => r.branch_code && r.ranting_id == null)
-          .map(r => ({ code: r.branch_code!, name: r.branch_name || r.branch_code! }))
-      )];
-      
-      if (newRantingCodes.length > 0) {
-        // Deduplicate by code
-        const unique = newRantingCodes.filter((r, i, arr) => arr.findIndex(x => x.code === r.code) === i);
-        const { data: newRantings } = await supabase
+      const newRantingsMap = new Map<string, string>();
+      validRows.forEach(r => {
+        if (r.branch_code && !r.ranting_id && !newRantingsMap.has(r.branch_code)) {
+          newRantingsMap.set(r.branch_code, r.branch_name || r.branch_code);
+        }
+      });
+
+      if (newRantingsMap.size > 0) {
+        const toInsertRanting = Array.from(newRantingsMap.entries()).map(([code, name]) => ({
+          code,
+          name,
+        }));
+        const { data: insertedRantings, error: rantingErr } = await supabase
           .from('rantings')
-          .upsert(unique, { onConflict: 'code' })
-          .select();
-        
-        if (newRantings) {
-          // Update ranting_id di rows yang baru dibuat
-          newRantings.forEach(nr => {
+          .insert(toInsertRanting)
+          .select('id, code');
+
+        if (!rantingErr && insertedRantings) {
+          insertedRantings.forEach(nr => {
             validRows.forEach(row => {
               if (row.branch_code === nr.code) row.ranting_id = nr.id;
             });
@@ -354,7 +332,6 @@ export default function StudentManagement() {
         }
       }
 
-      // Step 2: Insert santri
       let sisaCursor = 1;
       const toInsert = validRows.map(r => {
         const generatedNis = r.nis || `${r.branch_code || 'MIQ'}-${String(sisaCursor++).padStart(3, '0')}`;
@@ -374,7 +351,6 @@ export default function StudentManagement() {
         };
       });
 
-      // Insert in batches of 100
       const batchSize = 100;
       for (let i = 0; i < toInsert.length; i += batchSize) {
         const batch = toInsert.slice(i, i + batchSize);
@@ -419,9 +395,12 @@ export default function StudentManagement() {
       'Tingkatan': (s.class as any)?.level?.name || '-',
       'Status': s.active ? 'Aktif' : 'Nonaktif'
     }));
-    
-    if (exportData.length === 0) return;
-    
+
+    if (exportData.length === 0) {
+      toast.error('Tidak ada data santri untuk diexport');
+      return;
+    }
+
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Data Santri');
@@ -433,25 +412,23 @@ export default function StudentManagement() {
       toast.error('Tidak ada santri untuk dicetak');
       return;
     }
-    
+
     const toastId = toast.loading('Membuat PDF Kartu Ujian...');
     try {
       const doc = new jsPDF();
-      
       const cardWidth = 85;
       const cardHeight = 55;
       const startX = 20;
       const startY = 20;
       const xMargin = 5;
       const yMargin = 5;
-      
+
       let currentX = startX;
       let currentY = startY;
-      
+
       for (let i = 0; i < filteredStudents.length; i++) {
         const s = filteredStudents[i];
-        
-        // Cek halaman baru jika tidak muat (4 baris x 2 kolom)
+
         if (i > 0 && i % 8 === 0) {
           doc.addPage();
           currentX = startX;
@@ -462,41 +439,36 @@ export default function StudentManagement() {
         } else if (i > 0) {
           currentX += cardWidth + xMargin;
         }
-        
-        // Gambar kotak kartu
+
         doc.setDrawColor(0);
         doc.setFillColor(255, 255, 255);
         doc.roundedRect(currentX, currentY, cardWidth, cardHeight, 3, 3, 'FD');
-        
-        // Teks Kartu Ujian
+
         doc.setFontSize(12);
         doc.setFont('helvetica', 'bold');
-        doc.setTextColor(4, 120, 87); // Primary green
+        doc.setTextColor(4, 120, 87);
         doc.text('KARTU UJIAN MIQ', currentX + 5, currentY + 10);
-        
-        // Garis pemisah
+
         doc.setDrawColor(4, 120, 87);
         doc.setLineWidth(0.5);
         doc.line(currentX + 5, currentY + 12, currentX + cardWidth - 5, currentY + 12);
-        
-        // Nama dan Kelas
+
         doc.setFontSize(9);
         doc.setTextColor(0);
-        doc.text(`Nama : ${s.full_name.length > 20 ? s.full_name.substring(0,20)+'...' : s.full_name}`, currentX + 5, currentY + 20);
+        doc.text(`Nama : ${s.full_name.length > 20 ? s.full_name.substring(0, 20) + '...' : s.full_name}`, currentX + 5, currentY + 20);
         doc.text(`NIS  : ${s.nis || '-'}`, currentX + 5, currentY + 26);
         doc.text(`Kelas: ${s.class?.name || '-'}`, currentX + 5, currentY + 32);
         doc.text(`Rtg  : ${s.branch_name || '-'}`, currentX + 5, currentY + 38);
-        
-        // Generate QR Code untuk student nis (atau fallback id)
+
         const qrDataUrl = await QRCode.toDataURL(s.nis || s.id.toString(), { margin: 1, width: 60 });
         doc.addImage(qrDataUrl, 'PNG', currentX + cardWidth - 30, currentY + 15, 25, 25);
-        
+
         doc.setFontSize(7);
         doc.setFont('helvetica', 'normal');
         doc.text('Gunakan QR ini untuk', currentX + cardWidth - 32, currentY + 44);
         doc.text('scan absensi ujian', currentX + cardWidth - 32, currentY + 48);
       }
-      
+
       doc.save(`Kartu_Ujian_MIQ.pdf`);
       toast.success('Kartu ujian berhasil diunduh', { id: toastId });
     } catch (error) {
@@ -510,7 +482,6 @@ export default function StudentManagement() {
     setIsSaving(true);
     try {
       if (studentForm.id === 0) {
-        // Create
         const { error } = await supabase.from('students').insert({
           nis: studentForm.nis,
           full_name: studentForm.full_name,
@@ -523,7 +494,6 @@ export default function StudentManagement() {
         });
         if (error) throw error;
       } else {
-        // Update
         const { error } = await supabase.from('students').update({
           nis: studentForm.nis,
           full_name: studentForm.full_name,
@@ -581,13 +551,11 @@ export default function StudentManagement() {
     }
 
     try {
-      // Langkah 1: Cari semua scores milik santri ini
       const { data: scoresData } = await supabase
         .from('scores')
         .select('id')
         .eq('student_id', studentId);
 
-      // Langkah 2: Hapus score_details (anak dari scores)
       if (scoresData && scoresData.length > 0) {
         const scoreIds = scoresData.map(s => s.id);
         const { error: detailErr } = await supabase
@@ -596,7 +564,6 @@ export default function StudentManagement() {
           .in('score_id', scoreIds);
         if (detailErr) throw detailErr;
 
-        // Langkah 3: Hapus scores
         const { error: scoreErr } = await supabase
           .from('scores')
           .delete()
@@ -604,15 +571,14 @@ export default function StudentManagement() {
         if (scoreErr) throw scoreErr;
       }
 
-      // Langkah 4: Hapus santri
       const { error: studentErr } = await supabase
         .from('students')
         .delete()
         .eq('id', studentId);
       if (studentErr) throw studentErr;
 
-      // Berhasil — refresh data
       fetchData();
+      toast.success(`Santri "${studentName}" berhasil dihapus`);
     } catch (err: any) {
       console.error('Delete error:', err);
       toast.error(`Gagal menghapus santri: ${err.message}`);
@@ -622,14 +588,11 @@ export default function StudentManagement() {
   const handleDeleteAll = async () => {
     setIsDeletingAll(true);
     try {
-      // Langkah 1: Hapus semua detail nilai
       await supabase.from('score_details').delete().neq('id', 0);
-      // Langkah 2: Hapus semua nilai
       await supabase.from('scores').delete().neq('id', 0);
-      // Langkah 3: Hapus semua santri
       const { error } = await supabase.from('students').delete().neq('id', 0);
       if (error) throw error;
-      
+
       toast.success('Berhasil menghapus seluruh data santri dan nilainya.');
       setShowDeleteAllModal(false);
       fetchData();
@@ -643,10 +606,10 @@ export default function StudentManagement() {
 
   const filteredStudents = students.filter(s => {
     const matchesSearch = s.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (s.nis || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (s.branch_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
+      (s.nis || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.branch_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.class?.name || '').toLowerCase().includes(searchTerm.toLowerCase());
+
     const studentLevelId = (s.class as any)?.level?.id?.toString() || '';
     const matchesLevel = filterLevel === 'all' || studentLevelId === filterLevel;
 
@@ -656,223 +619,466 @@ export default function StudentManagement() {
     return matchesSearch && matchesLevel && matchesClass;
   });
 
+  // Paginated students
+  const totalPages = Math.ceil(filteredStudents.length / pageSize) || 1;
+  const startIndex = (currentPage - 1) * pageSize;
+  const paginatedStudents = filteredStudents.slice(startIndex, startIndex + pageSize);
+
   const validCount = importRows.filter(r => r.status === 'valid').length;
   const errorCount = importRows.filter(r => r.status === 'error').length;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="max-w-[1600px] mx-auto space-y-5 sm:space-y-6 text-left">
+      {/* Header & Action Buttons */}
+      <section className="flex flex-col xl:flex-row xl:items-center justify-between gap-4" data-purpose="page-header">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Manajemen Santri</h2>
-          <p className="text-gray-500">Kelola data santri, kelas, dan status keaktifan.</p>
+          <h2 className="text-2xl font-bold tracking-tight text-slate-900">Manajemen Santri</h2>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">
+            Kelola data santri, kelas, dan status keaktifan.
+          </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+
+        {/* Action Buttons Group */}
+        <div className="flex flex-wrap items-center gap-2" data-purpose="action-buttons">
+          {/* Export Button */}
           <button
             onClick={handleExportData}
-            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            type="button"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-xl shadow-apple-card hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.98] cursor-pointer"
           >
-            <Download size={18} />
-            Export
+            <Download size={14} className="text-slate-500" />
+            <span>Export</span>
           </button>
+
+          {/* Template Button */}
           <button
             onClick={handleDownloadTemplate}
-            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            type="button"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-xl shadow-apple-card hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.98] cursor-pointer"
           >
-            <FileDown size={18} />
-            Template
+            <FileDown size={14} className="text-slate-500" />
+            <span>Template</span>
           </button>
+
+          {/* Import Button */}
           <button
             onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            type="button"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-xl shadow-apple-card hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.98] cursor-pointer"
           >
-            <Upload size={18} />
-            Import
+            <Upload size={14} className="text-slate-500" />
+            <span>Import</span>
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileChange} />
+
+          {/* Hapus Semua Button */}
           <button
             onClick={() => setShowDeleteAllModal(true)}
-            className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-4 py-2 rounded-lg hover:bg-red-100 font-medium transition-colors"
+            type="button"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-medium text-rose-600 bg-white border border-rose-200/80 rounded-xl shadow-apple-card hover:bg-rose-50 hover:border-rose-300 transition-all active:scale-[0.98] cursor-pointer"
           >
-            <Trash2 size={18} />
-            Hapus Semua
+            <Trash2 size={14} className="text-rose-500" />
+            <span>Hapus Semua</span>
           </button>
+
+          {/* Cetak Kartu Ujian Button */}
           <button
             onClick={handleExportCards}
-            className="flex items-center gap-2 bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+            type="button"
+            className="inline-flex items-center space-x-1.5 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-xl shadow-apple-card hover:bg-slate-50 hover:border-slate-300 transition-all active:scale-[0.98] cursor-pointer"
           >
-            <FileDown size={18} className="text-red-600" />
-            Cetak Kartu Ujian
+            <FileDown size={14} className="text-rose-500" />
+            <span>Cetak Kartu Ujian</span>
           </button>
-          <button 
+
+          {/* Primary Tambah Button */}
+          <button
             onClick={() => openStudentModal()}
-            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-lg hover:bg-emerald-600 font-medium transition-colors"
+            type="button"
+            className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-xl shadow-apple-glow transition-all active:scale-[0.98] cursor-pointer"
           >
-            <Plus size={18} />
-            Tambah
+            <Plus size={16} strokeWidth={2.5} />
+            <span>Tambah</span>
           </button>
         </div>
-      </div>
+      </section>
 
-      {/* Toolbar */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col sm:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+      {/* Filter & Search Toolbar Card */}
+      <section
+        className="bg-white rounded-2xl p-3 border border-slate-200/70 shadow-apple-card flex flex-col md:flex-row items-center gap-3"
+        data-purpose="table-filters"
+      >
+        {/* Inset Apple Search Bar */}
+        <div className="relative flex-1 w-full">
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <Search size={16} />
+          </div>
           <input
             type="text"
+            className="w-full pl-9 pr-4 py-2 bg-slate-50/70 border border-slate-200 text-xs sm:text-sm text-slate-800 placeholder-slate-400 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all"
             placeholder="Cari nama santri atau kelas..."
-            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary outline-none"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        <select
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white text-gray-700 min-w-[180px]"
-          value={filterLevel}
-          onChange={(e) => { setFilterLevel(e.target.value); setFilterClass('all'); }}
-        >
-          <option value="all">Semua Tingkatan</option>
-          {levels.map(l => (
-            <option key={l.id} value={l.id}>{l.name}</option>
-          ))}
-        </select>
-        <select
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none bg-white text-gray-700 min-w-[150px]"
-          value={filterClass}
-          onChange={(e) => setFilterClass(e.target.value)}
-        >
-          <option value="all">Semua Kelas</option>
-          {classes
-            .filter(c => filterLevel === 'all' || c.level_id.toString() === filterLevel)
-            .map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-        </select>
-      </div>
 
-      {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        {/* Filter Dropdown: Semua Tingkatan */}
+        <div className="w-full md:w-56 shrink-0">
+          <div className="relative">
+            <select
+              className="w-full appearance-none bg-slate-50/70 border border-slate-200 text-xs sm:text-sm text-slate-700 font-medium py-2 px-3.5 pr-8 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
+              value={filterLevel}
+              onChange={(e) => { setFilterLevel(e.target.value); setFilterClass('all'); }}
+            >
+              <option value="all">Semua Tingkatan</option>
+              {levels.map(l => (
+                <option key={l.id} value={l.id}>{l.name}</option>
+              ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center px-2.5 pointer-events-none text-slate-400">
+              <ChevronRight size={14} className="rotate-90" />
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Dropdown: Semua Kelas */}
+        <div className="w-full md:w-52 shrink-0">
+          <div className="relative">
+            <select
+              className="w-full appearance-none bg-slate-50/70 border border-slate-200 text-xs sm:text-sm text-slate-700 font-medium py-2 px-3.5 pr-8 rounded-xl focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 transition-all cursor-pointer"
+              value={filterClass}
+              onChange={(e) => setFilterClass(e.target.value)}
+            >
+              <option value="all">Semua Kelas</option>
+              {classes
+                .filter(c => filterLevel === 'all' || c.level_id.toString() === filterLevel)
+                .map(c => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+            </select>
+            <div className="absolute inset-y-0 right-0 flex items-center px-2.5 pointer-events-none text-slate-400">
+              <ChevronRight size={14} className="rotate-90" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* BEGIN: Desktop Table View (hidden on mobile, visible md+) */}
+      <section className="hidden md:block bg-white rounded-2xl border border-slate-200/70 shadow-apple-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse" id="santri-data-table">
             <thead>
-              <tr className="bg-gray-50 border-b border-gray-200 text-sm text-gray-500 uppercase tracking-wider">
-                <th className="p-4 font-medium">NIS</th>
-                <th className="p-4 font-medium">Nama Santri</th>
-                <th className="p-4 font-medium">L/P</th>
-                <th className="p-4 font-medium">Ranting</th>
-                <th className="p-4 font-medium">Kelas</th>
-                <th className="p-4 font-medium">Status</th>
-                <th className="p-4 font-medium text-right">Aksi</th>
+              <tr className="border-b border-slate-100 bg-[#FAFBFD] text-[11px] font-semibold text-slate-400 uppercase tracking-wider select-none">
+                <th className="py-3.5 px-6" scope="col">NIS</th>
+                <th className="py-3.5 px-6" scope="col">NAMA SANTRI</th>
+                <th className="py-3.5 px-6 text-center" scope="col">L/P</th>
+                <th className="py-3.5 px-6" scope="col">RANTING</th>
+                <th className="py-3.5 px-6 text-center" scope="col">KELAS</th>
+                <th className="py-3.5 px-6 text-center" scope="col">STATUS</th>
+                <th className="py-3.5 px-6 text-right" scope="col">AKSI</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-100/80 text-xs text-slate-700 font-normal">
               {loading ? (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Memuat data...</td></tr>
-              ) : filteredStudents.length > 0 ? (
-                filteredStudents.map((student) => (
-                  <tr key={student.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="p-4 text-gray-600">{student.nis || '-'}</td>
-                    <td className="p-4 font-medium text-gray-900">
-                      <div>{student.full_name}</div>
-                      {student.father_name && <div className="text-xs text-gray-500 font-normal mt-0.5">Ayah: {student.father_name}</div>}
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    <Loader2 size={24} className="animate-spin mx-auto mb-2 text-brand-600" />
+                    <span>Memuat data santri...</span>
+                  </td>
+                </tr>
+              ) : paginatedStudents.length > 0 ? (
+                paginatedStudents.map((student) => (
+                  <tr key={student.id} className="hover:bg-slate-50/60 transition-colors group">
+                    <td className="py-4 px-6 text-slate-500 font-medium whitespace-nowrap">
+                      {student.nis || '-'}
                     </td>
-                    <td className="p-4 text-gray-600">{student.gender || '-'}</td>
-                    <td className="p-4 text-gray-600">{student.branch_name || '-'}</td>
-                    <td className="p-4 text-gray-600">
-                      <div>{student.class?.name || '-'}</div>
-                      <div className="text-xs text-gray-500 mt-0.5">{(student.class as any)?.level?.name || '-'}</div>
-                    </td>
-                    <td className="p-4">
-                      {student.active ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Aktif</span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">Nonaktif</span>
+                    <td className="py-4 px-6">
+                      <div className="font-semibold text-slate-900">{student.full_name}</div>
+                      {student.father_name && (
+                        <div className="text-[11px] text-slate-400 mt-0.5 font-normal">
+                          Ayah: {student.father_name}
+                        </div>
                       )}
                     </td>
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button 
-                          onClick={() => openStudentModal(student)}
-                          className="text-blue-500 hover:text-blue-700 p-1.5 rounded-md hover:bg-blue-50 transition-colors inline-flex items-center justify-center"
-                          title="Edit Santri"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
-                        </button>
-                        <button 
-                          onClick={() => handleDelete(student.id, student.full_name)}
-                          className="text-red-400 hover:text-red-600 p-1.5 rounded-md hover:bg-red-50 transition-colors inline-flex items-center justify-center"
-                          title="Hapus Santri"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
+                    <td className="py-4 px-6 text-center text-slate-500 font-medium">
+                      {student.gender || '-'}
+                    </td>
+                    <td className="py-4 px-6 text-slate-600 font-medium">
+                      {student.branch_name || '-'}
+                    </td>
+                    <td className="py-4 px-6 text-center whitespace-nowrap">
+                      <span className="block font-semibold text-slate-800">
+                        {student.class?.name || '-'}
+                      </span>
+                      <span className="block text-[10px] text-slate-400 font-medium uppercase tracking-tight">
+                        {(student.class as any)?.level?.name || ''}
+                      </span>
+                    </td>
+                    <td className="py-4 px-6 text-center whitespace-nowrap">
+                      {student.active ? (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200/50">
+                          Aktif
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-rose-50 text-rose-600 border border-rose-200/50">
+                          Nonaktif
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-4 px-6 text-right space-x-2 whitespace-nowrap">
+                      <button
+                        onClick={() => openStudentModal(student)}
+                        className="text-blue-500 hover:text-blue-700 p-1.5 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
+                        title="Edit"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(student.id, student.full_name)}
+                        className="text-rose-500 hover:text-rose-700 p-1.5 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        title="Hapus"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </td>
                   </tr>
                 ))
               ) : (
-                <tr><td colSpan={7} className="p-8 text-center text-gray-500">Tidak ada santri yang ditemukan.</td></tr>
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                    Tidak ada santri yang ditemukan.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
-      </div>
 
-      {/* Import Modal */}
+        {/* Desktop Table Footer: Minimalist Apple Pagination */}
+        <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between text-xs font-medium text-slate-500">
+          <div>
+            Menampilkan <span className="font-semibold text-slate-800">{filteredStudents.length > 0 ? startIndex + 1 : 0}</span> - <span className="font-semibold text-slate-800">{Math.min(startIndex + pageSize, filteredStudents.length)}</span> dari <span className="font-semibold text-slate-800">{filteredStudents.length}</span> santri
+          </div>
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Sebelumnya
+            </button>
+            {Array.from({ length: Math.min(5, totalPages) }, (_, idx) => {
+              let pageNum: number;
+              if (totalPages <= 5) pageNum = idx + 1;
+              else if (currentPage <= 3) pageNum = idx + 1;
+              else if (currentPage >= totalPages - 2) pageNum = totalPages - 4 + idx;
+              else pageNum = currentPage - 2 + idx;
+
+              return (
+                <button
+                  key={pageNum}
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`w-8 h-8 rounded-lg font-semibold flex items-center justify-center transition-all cursor-pointer ${
+                    currentPage === pageNum
+                      ? 'bg-brand-600 text-white shadow-xs'
+                      : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {pageNum}
+                </button>
+              );
+            })}
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages || totalPages === 0}
+              className="px-3 py-1.5 border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+            >
+              Selanjutnya
+            </button>
+          </div>
+        </div>
+      </section>
+      {/* END: Desktop Table View */}
+
+      {/* BEGIN: Mobile (HP) Card List View (visible on mobile only, < md) */}
+      <section className="block md:hidden space-y-3" data-purpose="mobile-student-cards">
+        {loading ? (
+          <div className="bg-white rounded-2xl p-8 border border-slate-200/70 text-center text-slate-400">
+            <Loader2 size={24} className="animate-spin mx-auto mb-2 text-brand-600" />
+            <p className="text-xs">Memuat data santri...</p>
+          </div>
+        ) : paginatedStudents.length > 0 ? (
+          paginatedStudents.map((student) => (
+            <article
+              key={student.id}
+              className="bg-white rounded-2xl p-4 border border-slate-200/70 shadow-apple-card space-y-3"
+            >
+              {/* Header: Name, Father, Badges */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <h4 className="text-[15px] font-bold text-slate-900 tracking-tight leading-snug truncate">
+                    {student.full_name}
+                  </h4>
+                  {student.father_name && (
+                    <p className="text-xs text-slate-400 font-normal mt-0.5">
+                      Ayah: {student.father_name}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10.5px] font-semibold bg-slate-100 text-slate-600">
+                    {student.gender || 'L'}
+                  </span>
+                  {student.active ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-emerald-50 text-emerald-600 border border-emerald-200/50">
+                      Aktif
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-rose-50 text-rose-600 border border-rose-200/50">
+                      Nonaktif
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Info Badges Row */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-xs text-slate-600">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 text-slate-600 text-[11px] font-medium">
+                  NIS: <strong>{student.nis || '-'}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-100/60 text-brand-700 text-[11px] font-semibold">
+                  <BookOpen size={11} />
+                  {student.class?.name || '-'} {(student.class as any)?.level?.name ? `(${(student.class as any)?.level?.name})` : ''}
+                </span>
+                {student.branch_name && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-100 text-slate-500 text-[11px] truncate max-w-full">
+                    <Building2 size={11} />
+                    <span className="truncate">{student.branch_name}</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Action Buttons for Mobile */}
+              <div className="pt-2 border-t border-slate-100/80 flex items-center gap-2">
+                <button
+                  onClick={() => openStudentModal(student)}
+                  type="button"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-blue-50/80 text-blue-600 hover:bg-blue-100 active:scale-95 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <Edit2 size={13} />
+                  <span>Edit Data</span>
+                </button>
+                <button
+                  onClick={() => handleDelete(student.id, student.full_name)}
+                  type="button"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-rose-50/80 text-rose-600 hover:bg-rose-100 active:scale-95 text-xs font-semibold transition-all cursor-pointer"
+                >
+                  <Trash2 size={13} />
+                  <span>Hapus</span>
+                </button>
+              </div>
+            </article>
+          ))
+        ) : (
+          <div className="bg-white rounded-2xl p-8 border border-slate-200/70 text-center text-slate-400 text-xs">
+            Tidak ada santri yang ditemukan.
+          </div>
+        )}
+
+        {/* Mobile Pagination Footer */}
+        {filteredStudents.length > 0 && (
+          <div className="bg-white rounded-2xl p-3.5 border border-slate-200/70 shadow-apple-card flex items-center justify-between text-xs text-slate-500">
+            <span>
+              {startIndex + 1}-{Math.min(startIndex + pageSize, filteredStudents.length)} dari {filteredStudents.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="p-1.5 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-40"
+              >
+                <ChevronLeft size={16} />
+              </button>
+              <span className="px-2 font-semibold text-slate-800">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="p-1.5 border border-slate-200 rounded-lg text-slate-600 disabled:opacity-40"
+              >
+                <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+      </section>
+      {/* END: Mobile Card List View */}
+
+      {/* BEGIN: Import Modal */}
       {showImportModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col border border-slate-200/80 overflow-hidden">
+            <div className="p-5 sm:p-6 border-b border-slate-100 flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <FileSpreadsheet className="text-primary" size={24} />
+                <div className="w-10 h-10 rounded-xl bg-emerald-50 text-brand-600 flex items-center justify-center">
+                  <FileSpreadsheet size={20} />
+                </div>
                 <div>
-                  <h3 className="text-lg font-bold text-gray-900">Preview Import Santri</h3>
-                  <p className="text-sm text-gray-500">
-                    <span className="text-green-600 font-semibold">{validCount} valid</span>
-                    {errorCount > 0 && <span className="text-red-500 font-semibold"> • {errorCount} error</span>}
+                  <h3 className="text-base sm:text-lg font-bold text-slate-900">Preview Import Santri</h3>
+                  <p className="text-xs text-slate-500">
+                    <span className="text-emerald-600 font-semibold">{validCount} valid</span>
+                    {errorCount > 0 && <span className="text-rose-500 font-semibold"> • {errorCount} error</span>}
                     {' '}dari {importRows.length} baris
                   </p>
                 </div>
               </div>
-              <button onClick={() => { setShowImportModal(false); setImportRows([]); }} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Format hint */}
-            <div className="px-6 pt-4 space-y-3">
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                💡 Format kolom Excel yang dibutuhkan: <strong>Nama</strong> dan <strong>Kelas</strong> (nama kelas harus persis sama, contoh: A1, B2, C1)
-              </div>
-              <button 
-                onClick={handleDownloadTemplate}
-                className="flex items-center gap-2 text-sm text-primary hover:text-emerald-600 font-medium"
+              <button
+                onClick={() => { setShowImportModal(false); setImportRows([]); }}
+                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
-                <FileDown size={16} />
-                Download Contoh File Excel (Template)
+                <X size={18} />
               </button>
             </div>
 
-            {/* Rows preview */}
-            <div className="flex-1 overflow-auto p-6">
-              <table className="w-full text-sm border-collapse">
+            <div className="px-5 sm:px-6 pt-4 space-y-2.5">
+              <div className="p-3 bg-blue-50/80 border border-blue-100 rounded-xl text-xs text-blue-700">
+                💡 Format kolom Excel: <strong>Nama</strong> dan <strong>Kelas</strong> (contoh: 4, 4 ULA, 1 WUSTHA).
+              </div>
+              <button
+                onClick={handleDownloadTemplate}
+                className="inline-flex items-center gap-1.5 text-xs text-brand-600 hover:text-brand-700 font-semibold cursor-pointer"
+              >
+                <FileDown size={14} />
+                <span>Download Contoh File Excel (Template)</span>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-5 sm:p-6">
+              <table className="w-full text-xs border-collapse">
                 <thead>
-                  <tr className="bg-gray-50 text-gray-500 uppercase text-xs tracking-wider">
-                    <th className="p-3 text-left rounded-tl-lg">Nama</th>
+                  <tr className="bg-slate-50 text-slate-500 uppercase text-[11px] tracking-wider border-b border-slate-100">
+                    <th className="p-3 text-left">Nama</th>
                     <th className="p-3 text-left">Kelas</th>
-                    <th className="p-3 text-left rounded-tr-lg">Status</th>
+                    <th className="p-3 text-left">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-slate-100">
                   {importRows.map((row, i) => (
-                    <tr key={i} className={row.status === 'error' ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                      <td className="p-3 font-medium text-gray-900">{row.full_name || <span className="text-gray-400 italic">kosong</span>}</td>
-                      <td className="p-3 text-gray-600">{row.class_name || '-'}</td>
+                    <tr key={i} className={row.status === 'error' ? 'bg-rose-50/50' : 'hover:bg-slate-50/60'}>
+                      <td className="p-3 font-medium text-slate-800">
+                        {row.full_name || <span className="text-slate-400 italic">kosong</span>}
+                      </td>
+                      <td className="p-3 text-slate-600">{row.class_name || '-'}</td>
                       <td className="p-3">
                         {row.status === 'valid' ? (
-                          <span className="flex items-center gap-1 text-green-600 font-medium"><CheckCircle size={14} /> Valid</span>
+                          <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold">
+                            <CheckCircle size={13} /> Valid
+                          </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-red-500 font-medium"><AlertCircle size={14} /> {row.error}</span>
+                          <span className="inline-flex items-center gap-1 text-rose-500 font-semibold">
+                            <AlertCircle size={13} /> {row.error}
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -881,179 +1087,208 @@ export default function StudentManagement() {
               </table>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-gray-100 flex gap-3 items-center">
-              {importError && <p className="text-sm text-red-500 flex-1">{importError}</p>}
-              {importDone && <p className="text-sm text-green-600 font-bold flex-1">✅ {validCount} santri berhasil diimport!</p>}
+            <div className="p-5 sm:p-6 border-t border-slate-100 flex flex-col sm:flex-row gap-3 items-center">
+              {importError && <p className="text-xs text-rose-500 flex-1">{importError}</p>}
+              {importDone && <p className="text-xs text-emerald-600 font-bold flex-1">✅ {validCount} santri berhasil diimport!</p>}
               {!importDone && !importError && <div className="flex-1" />}
-              <button onClick={() => { setShowImportModal(false); setImportRows([]); }} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50">
-                Batal
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={validCount === 0 || importLoading || importDone}
-                className="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:bg-emerald-600 disabled:opacity-50 flex items-center gap-2"
-              >
-                {importLoading ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-                Import {validCount} Santri
-              </button>
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                <button
+                  onClick={() => { setShowImportModal(false); setImportRows([]); }}
+                  className="flex-1 sm:flex-none px-4 py-2 border border-slate-200 rounded-xl text-slate-700 text-xs font-semibold hover:bg-slate-50 cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  onClick={handleImport}
+                  disabled={validCount === 0 || importLoading || importDone}
+                  className="flex-1 sm:flex-none px-5 py-2 bg-brand-600 text-white rounded-xl text-xs font-semibold hover:bg-brand-700 disabled:opacity-50 flex items-center justify-center gap-2 shadow-apple-glow cursor-pointer"
+                >
+                  {importLoading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  <span>Import {validCount} Santri</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
+      {/* END: Import Modal */}
 
-      {/* Add/Edit Student Modal */}
+      {/* BEGIN: Add/Edit Student Modal */}
       {showStudentModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h3 className="font-bold text-gray-900">{studentForm.id === 0 ? 'Tambah Santri' : 'Edit Santri'}</h3>
-              <button onClick={() => setShowStudentModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={20} />
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200/80">
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-[#FAFBFD]">
+              <h3 className="font-bold text-slate-900 text-base">
+                {studentForm.id === 0 ? 'Tambah Santri' : 'Edit Santri'}
+              </h3>
+              <button
+                onClick={() => setShowStudentModal(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              >
+                <X size={18} />
               </button>
             </div>
-            <form onSubmit={handleSaveStudent} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Lengkap</label>
-                  <input 
-                    type="text" required 
+
+            <form onSubmit={handleSaveStudent} className="p-5 space-y-4 max-h-[75vh] overflow-y-auto text-xs sm:text-sm">
+              <div className="space-y-3.5">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Lengkap</label>
+                  <input
+                    type="text"
+                    required
                     placeholder="Masukkan nama santri"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     value={studentForm.full_name}
                     onChange={(e) => setStudentForm(p => ({ ...p, full_name: e.target.value }))}
                   />
                 </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">NIS</label>
-                  <input 
-                    type="text" required 
-                    placeholder="Nomor Induk Santri"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                    value={studentForm.nis}
-                    onChange={(e) => setStudentForm(p => ({ ...p, nis: e.target.value }))}
-                  />
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">NIS</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Nomor Induk"
+                      className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      value={studentForm.nis}
+                      onChange={(e) => setStudentForm(p => ({ ...p, nis: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Jenis Kelamin</label>
+                    <select
+                      required
+                      className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      value={studentForm.gender}
+                      onChange={(e) => setStudentForm(p => ({ ...p, gender: e.target.value }))}
+                    >
+                      <option value="L">Laki-laki (L)</option>
+                      <option value="P">Perempuan (P)</option>
+                    </select>
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Jenis Kelamin</label>
-                  <select 
-                    required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                    value={studentForm.gender}
-                    onChange={(e) => setStudentForm(p => ({ ...p, gender: e.target.value }))}
-                  >
-                    <option value="L">Laki-laki (L)</option>
-                    <option value="P">Perempuan (P)</option>
-                  </select>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Ayah</label>
-                  <input 
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Ayah (Opsional)</label>
+                  <input
                     type="text"
-                    placeholder="Nama ayah santri (Opsional)"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    placeholder="Nama ayah santri"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
                     value={studentForm.father_name}
                     onChange={(e) => setStudentForm(p => ({ ...p, father_name: e.target.value }))}
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Kode Ranting</label>
-                  <input 
-                    type="text"
-                    placeholder="Misal: R01"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                    value={studentForm.branch_code}
-                    onChange={(e) => setStudentForm(p => ({ ...p, branch_code: e.target.value }))}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Kode Ranting</label>
+                    <input
+                      type="text"
+                      placeholder="Misal: R01"
+                      className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      value={studentForm.branch_code}
+                      onChange={(e) => setStudentForm(p => ({ ...p, branch_code: e.target.value }))}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Nama Ranting</label>
+                    <input
+                      type="text"
+                      placeholder="Nama Ranting"
+                      className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500"
+                      value={studentForm.branch_name}
+                      onChange={(e) => setStudentForm(p => ({ ...p, branch_name: e.target.value }))}
+                    />
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nama Ranting</label>
-                  <input 
-                    type="text"
-                    placeholder="Misal: Ranting Pusat"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
-                    value={studentForm.branch_name}
-                    onChange={(e) => setStudentForm(p => ({ ...p, branch_name: e.target.value }))}
-                  />
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
-                  <select 
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">Kelas</label>
+                  <select
                     required
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary outline-none"
+                    className="w-full px-3.5 py-2 bg-slate-50/70 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 cursor-pointer"
                     value={studentForm.class_id}
                     onChange={(e) => setStudentForm(p => ({ ...p, class_id: parseInt(e.target.value) }))}
                   >
                     <option value={0} disabled>Pilih Kelas</option>
                     {classes.map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({(c as any).level?.name || 'Tanpa Tingkat'})</option>
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({(c as any).level?.name || 'Tanpa Tingkat'})
+                      </option>
                     ))}
                   </select>
                 </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="checkbox"
+                    id="active-status"
+                    checked={studentForm.active}
+                    onChange={(e) => setStudentForm(p => ({ ...p, active: e.target.checked }))}
+                    className="rounded text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer"
+                  />
+                  <label htmlFor="active-status" className="text-xs font-medium text-slate-700 cursor-pointer">
+                    Status Santri Aktif
+                  </label>
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 mt-4">
-                <input 
-                  type="checkbox" 
-                  id="active-status"
-                  checked={studentForm.active}
-                  onChange={(e) => setStudentForm(p => ({ ...p, active: e.target.checked }))}
-                  className="rounded border-gray-300 text-primary focus:ring-primary w-4 h-4"
-                />
-                <label htmlFor="active-status" className="text-sm font-medium text-gray-700 cursor-pointer">
-                  Status Santri Aktif
-                </label>
-              </div>
-              <div className="pt-4 flex gap-3">
-                <button type="button" onClick={() => setShowStudentModal(false)} className="flex-1 py-2 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">Batal</button>
-                <button type="submit" disabled={isSaving} className="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-emerald-600 flex justify-center items-center gap-2">
-                  {isSaving ? <Loader2 size={18} className="animate-spin" /> : 'Simpan'}
+              <div className="pt-3 flex gap-2.5">
+                <button
+                  type="button"
+                  onClick={() => setShowStudentModal(false)}
+                  className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl font-semibold hover:bg-slate-200 transition-colors text-xs cursor-pointer"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="flex-1 py-2.5 bg-brand-600 text-white rounded-xl font-semibold hover:bg-brand-700 shadow-apple-glow transition-all flex justify-center items-center gap-1.5 text-xs cursor-pointer disabled:opacity-50"
+                >
+                  {isSaving ? <Loader2 size={15} className="animate-spin" /> : 'Simpan Data'}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+      {/* END: Add/Edit Student Modal */}
 
-      {/* Modal Hapus Semua */}
+      {/* BEGIN: Modal Hapus Semua */}
       {showDeleteAllModal && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="p-6 text-center">
-              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Trash2 size={32} />
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Seluruh Santri?</h3>
-              <p className="text-gray-500 mb-6">
-                Anda yakin ingin menghapus <strong>seluruh data santri</strong>? Tindakan ini tidak dapat dibatalkan dan akan <strong>menghapus semua nilai</strong> yang terkait.
-              </p>
-              
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setShowDeleteAllModal(false)}
-                  className="flex-1 py-2.5 border border-gray-300 rounded-lg text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Batal
-                </button>
-                <button 
-                  onClick={handleDeleteAll}
-                  disabled={isDeletingAll}
-                  className="flex-1 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-70"
-                >
-                  {isDeletingAll ? <Loader2 size={18} className="animate-spin" /> : 'Ya, Hapus Semua'}
-                </button>
-              </div>
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md border border-slate-200/80 p-6 text-center">
+            <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-rose-100">
+              <Trash2 size={26} />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">Hapus Seluruh Santri?</h3>
+            <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+              Anda yakin ingin menghapus <strong>seluruh data santri</strong>? Tindakan ini tidak dapat dibatalkan dan akan <strong>menghapus semua nilai</strong> yang terkait.
+            </p>
+
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => setShowDeleteAllModal(false)}
+                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-slate-700 font-semibold text-xs hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteAll}
+                disabled={isDeletingAll}
+                className="flex-1 py-2.5 bg-rose-600 text-white rounded-xl font-semibold text-xs hover:bg-rose-700 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-70 cursor-pointer shadow-sm"
+              >
+                {isDeletingAll ? <Loader2 size={15} className="animate-spin" /> : 'Ya, Hapus Semua'}
+              </button>
             </div>
           </div>
         </div>
       )}
-
+      {/* END: Modal Hapus Semua */}
     </div>
   );
 }
