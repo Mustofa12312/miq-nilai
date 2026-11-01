@@ -1,37 +1,60 @@
-import { Outlet, Link } from 'react-router-dom';
+import { Outlet, Link, useLocation } from 'react-router-dom';
 import { Home, UserCircle, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function ExaminerLayout() {
   const { signOut } = useAuth();
+  const location = useLocation();
 
   return (
-    <div className="flex flex-col h-[100dvh] w-full max-w-md mx-auto bg-gray-50 text-left relative shadow-xl overflow-hidden border-x border-gray-200">
-      {/* Header */}
-      <header className="bg-primary text-white p-4 shadow-sm z-10 flex items-center justify-between">
-        <h1 className="text-lg font-bold tracking-tight">Penilaian MIQ</h1>
-        <button 
-          onClick={() => signOut()}
-          className="p-1 rounded hover:bg-white/10 transition-colors"
-        >
-          <LogOut size={20} />
-        </button>
+    <div className="w-full max-w-[420px] min-h-screen mx-auto bg-[#F6F8F9] text-slate-800 font-sans flex flex-col relative shadow-2xl md:my-4 md:rounded-[40px] md:overflow-hidden md:border md:border-slate-200/80 selection:bg-emerald-100 selection:text-emerald-900">
+      {/* Top Header - iOS Blur Header */}
+      <header className="sticky top-0 z-30 ios-blur-header border-b border-slate-200/60 safe-top">
+        <div className="px-5 h-14 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
+            <h1 className="text-[17px] font-semibold tracking-tight text-slate-900">Penilaian MIQ</h1>
+          </div>
+          <button 
+            onClick={() => signOut()}
+            aria-label="Keluar dari akun"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-slate-500 hover:text-rose-600 hover:bg-rose-50/80 active:scale-95 transition duration-150 ease-out"
+            title="Keluar dari akun"
+            type="button"
+          >
+            <LogOut size={19} />
+          </button>
+        </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto p-4 pb-24">
+      <main className="flex-1 overflow-y-auto">
         <Outlet />
       </main>
 
-      {/* Bottom Navigation */}
-      <nav className="absolute bottom-0 w-full bg-white border-t border-gray-200 flex justify-around items-center p-3 pb-safe shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-10">
-        <Link to="/examiner" className="flex flex-col items-center gap-1 text-primary">
-          <Home size={24} />
-          <span className="text-[10px] font-medium">Beranda</span>
+      {/* Bottom Navigation - Sleek iOS Style */}
+      <nav className="sticky bottom-0 w-full ios-blur-header border-t border-slate-200/60 flex justify-around items-center py-2 px-6 shadow-[0_-4px_16px_rgba(0,0,0,0.03)] z-30">
+        <Link 
+          to="/examiner" 
+          className={`flex flex-col items-center gap-0.5 py-1 px-4 rounded-xl transition-all ${
+            location.pathname === '/examiner' 
+              ? 'text-emerald-700 font-semibold' 
+              : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <Home size={22} strokeWidth={location.pathname === '/examiner' ? 2.3 : 1.8} />
+          <span className="text-[11px] tracking-tight">Beranda</span>
         </Link>
-        <Link to="/examiner/profile" className="flex flex-col items-center gap-1 text-gray-400 hover:text-gray-600 transition-colors">
-          <UserCircle size={24} />
-          <span className="text-[10px] font-medium">Profil</span>
+        <Link 
+          to="/examiner/profile" 
+          className={`flex flex-col items-center gap-0.5 py-1 px-4 rounded-xl transition-all ${
+            location.pathname.startsWith('/examiner/profile') 
+              ? 'text-emerald-700 font-semibold' 
+              : 'text-slate-400 hover:text-slate-600'
+          }`}
+        >
+          <UserCircle size={22} strokeWidth={location.pathname.startsWith('/examiner/profile') ? 2.3 : 1.8} />
+          <span className="text-[11px] tracking-tight">Profil</span>
         </Link>
       </nav>
     </div>

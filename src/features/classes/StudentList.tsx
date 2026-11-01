@@ -69,48 +69,60 @@ export default function StudentList() {
   const paramString = scoringParams.toString() ? `?${scoringParams.toString()}` : '';
 
   return (
-    <div className="space-y-6">
+    <div className="px-4 py-4 space-y-4 pb-20">
       {/* Header Info */}
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate(-1)} className="p-2 bg-white border border-gray-200 rounded-lg active:bg-gray-100">
-          <ChevronLeft size={20} className="text-gray-600" />
+      <div className="flex items-center gap-3">
+        <button 
+          onClick={() => navigate(-1)} 
+          className="w-9 h-9 rounded-full bg-white border border-slate-200/70 shadow-sm flex items-center justify-center text-slate-600 active:scale-95 transition-all"
+        >
+          <ChevronLeft size={20} />
         </button>
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Kelas {classInfo?.name || '...'}</h2>
-          <p className="text-sm text-gray-500">Pilih Santri untuk dinilai</p>
+          <h2 className="text-[17px] font-bold text-slate-900 tracking-tight leading-snug">Kelas {classInfo?.name || '...'}</h2>
+          <p className="text-[12.5px] text-slate-400 font-medium">Pilih Santri untuk dinilai</p>
         </div>
       </div>
 
       {/* Progress */}
-      <div className="bg-white p-4 rounded-xl border border-gray-200 flex justify-between items-center shadow-sm">
+      <div className="bg-white p-4 rounded-2xl border border-slate-200/70 shadow-[0_2px_14px_-2px_rgba(0,0,0,0.03),0_1px_3px_0_rgba(0,0,0,0.02)] flex justify-between items-center">
         <div>
-          <p className="text-xs text-gray-500 font-medium">Total: {total} Santri</p>
-          <p className="text-sm font-bold text-gray-900">{scored} Sudah • {total - scored} Belum</p>
+          <p className="text-[12px] text-slate-400 font-medium">Total: {total} Santri</p>
+          <p className="text-[14px] font-semibold text-slate-800 mt-0.5">
+            <span className="text-emerald-700">{scored} Sudah</span> <span className="text-slate-300 mx-1">•</span> <span className="text-amber-700">{total - scored} Belum</span>
+          </p>
         </div>
-        <div className="text-primary font-bold text-xl">
+        <div className="text-emerald-700 font-bold text-lg px-3 py-1 rounded-full bg-emerald-50 border border-emerald-100/60">
           {progressPercentage}%
         </div>
       </div>
 
       {/* List */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden divide-y divide-gray-100">
+      <div className="bg-white rounded-2xl border border-slate-200/70 shadow-[0_2px_14px_-2px_rgba(0,0,0,0.03),0_1px_3px_0_rgba(0,0,0,0.02)] overflow-hidden divide-y divide-slate-100">
         {students.length === 0 ? (
-          <div className="p-8 text-center text-gray-500">Belum ada santri di kelas ini.</div>
+          <div className="p-8 text-center text-slate-400 text-sm font-medium">Belum ada santri di kelas ini.</div>
         ) : (
           students.map((student) => (
             <button
               key={student.id}
               onClick={() => navigate(`/examiner/class/${classId}/student/${student.id}${paramString}`)}
-              className="w-full text-left p-4 active:bg-gray-50 transition-colors flex justify-between items-center group"
+              className="w-full text-left p-4 active:bg-slate-50 transition-colors flex justify-between items-center group cursor-pointer"
             >
               <div className="flex items-center gap-3">
                 {/* Status Indicator */}
-                <div className={`w-3 h-3 rounded-full ${student.status === 'SUDAH' ? 'bg-primary' : 'bg-warning'}`} />
-                <p className="font-medium text-gray-900 group-hover:text-primary transition-colors">{student.full_name}</p>
+                <div className={`w-2.5 h-2.5 rounded-full ${student.status === 'SUDAH' ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-amber-400'}`} />
+                <div>
+                  <p className="text-[14px] font-semibold text-slate-800 group-hover:text-emerald-700 transition-colors">{student.full_name}</p>
+                  {student.room && <span className="text-[11px] text-slate-400 font-medium">{student.room}</span>}
+                </div>
               </div>
-              {student.status === 'SUDAH' && (
-                <span className="text-xs font-medium text-primary bg-accent-bg px-2 py-1 rounded-full">
+              {student.status === 'SUDAH' ? (
+                <span className="text-[12px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/50 px-2.5 py-1 rounded-full">
                   Selesai
+                </span>
+              ) : (
+                <span className="text-[12px] font-medium text-slate-400 group-hover:text-emerald-600 transition-colors">
+                  Nilai &rarr;
                 </span>
               )}
             </button>

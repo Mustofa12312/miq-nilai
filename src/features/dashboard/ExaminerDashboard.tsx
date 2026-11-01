@@ -147,7 +147,11 @@ export default function ExaminerDashboard() {
   }, {} as Record<string, ExaminerAssignment[]>);
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500">Memuat data...</div>;
+    return (
+      <div className="p-8 text-center text-slate-400 font-medium">
+        Memuat data...
+      </div>
+    );
   }
 
   // Calculate global stats
@@ -156,96 +160,148 @@ export default function ExaminerDashboard() {
   const globalUnscored = Object.values(stats).reduce((sum, s) => sum + s.unscored, 0);
 
   return (
-    <div className="space-y-6 pb-20">
-      <div className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden">
-        {/* Decorative background element */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-bl-[100px] -mr-4 -mt-4 transition-all" />
-        <div className="absolute bottom-0 right-10 w-16 h-16 bg-primary/5 rounded-tl-[50px] -mb-4 transition-all" />
-        
+    <div className="px-4 py-4 space-y-4 pb-20">
+      {/* BEGIN: GreetingSummaryCard */}
+      <section className="relative overflow-hidden bg-white rounded-3xl p-5 border border-slate-100 shadow-[0_2px_14px_-2px_rgba(0,0,0,0.03),0_1px_3px_0_rgba(0,0,0,0.02)]">
+        {/* Subtle Apple-like abstract light accent on background */}
+        <div className="absolute -top-12 -right-12 w-44 h-44 rounded-full bg-gradient-to-br from-emerald-100/40 via-teal-50/20 to-transparent pointer-events-none blur-xl"></div>
+        <div className="absolute -bottom-8 -right-6 w-28 h-28 rounded-full bg-emerald-50/30 pointer-events-none"></div>
+
         <div className="relative z-10">
-          <h2 className="text-lg font-bold text-gray-900 mb-1">Assalamu'alaikum, {profile?.full_name || 'Penguji'}</h2>
-          <p className="text-sm text-gray-500 mb-4">Periode: {activePeriod?.name || 'Tidak ada periode aktif'}</p>
-          
-          {Object.keys(stats).length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-4 pt-4 border-t border-gray-100/60">
-              <div className="bg-gray-50/80 px-3 py-2 rounded-xl flex items-center gap-2 border border-gray-200/50">
-                <span className="w-2.5 h-2.5 rounded-full bg-gray-400"></span>
-                <span className="text-sm font-bold text-gray-700">{globalTotal} <span className="font-medium">Total Santri</span></span>
-              </div>
-              <div className="bg-emerald-50/80 px-3 py-2 rounded-xl flex items-center gap-2 border border-emerald-200/50">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-200"></span>
-                <span className="text-sm font-bold text-emerald-700">{globalScored} <span className="font-medium">Sudah Dinilai</span></span>
-              </div>
-              <div className="bg-amber-50/80 px-3 py-2 rounded-xl flex items-center gap-2 border border-amber-200/50">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-sm shadow-amber-200"></span>
-                <span className="text-sm font-bold text-amber-700">{globalUnscored} <span className="font-medium">Belum Dinilai</span></span>
-              </div>
+          {/* User Greeting */}
+          <h2 className="text-[17px] leading-snug font-semibold text-slate-900 tracking-tight">
+            Assalamu'alaikum, <span className="text-slate-800">{profile?.full_name || 'Penguji'}</span>
+          </h2>
+          {/* Period Status */}
+          <p className="text-[13px] font-medium text-slate-400 mt-0.5">
+            Periode: <span className="text-slate-600 font-semibold">{activePeriod?.name || 'Tidak ada periode aktif'}</span>
+          </p>
+
+          {/* Badges / Indicators Grid */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {/* Badge 1: Total Santri */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-100/80 border border-slate-200/50 text-[12.5px] font-medium text-slate-700">
+              <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+              <span><strong>{globalTotal}</strong> Total Santri</span>
             </div>
-          )}
+            {/* Badge 2: Sudah Dinilai */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 text-[12.5px] font-medium text-emerald-800">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <span><strong>{globalScored}</strong> Sudah Dinilai</span>
+            </div>
+            {/* Badge 3: Belum Dinilai */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-50/90 border border-amber-200/70 text-[12.5px] font-medium text-amber-800">
+              <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+              <span><strong>{globalUnscored}</strong> Belum Dinilai</span>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
+      {/* END: GreetingSummaryCard */}
 
-      <div className="relative">
-         <input
-           type="text"
-           placeholder="Cari kelas atau tingkatan..."
-           className="w-full px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary outline-none shadow-sm transition-all"
-           value={searchTerm}
-           onChange={(e) => setSearchTerm(e.target.value)}
-         />
-      </div>
+      {/* BEGIN: SearchSection */}
+      <section className="relative">
+        <div className="relative flex items-center">
+          <svg
+            className="absolute left-3.5 w-4 h-4 text-slate-400 pointer-events-none"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="2.2"
+            viewBox="0 0 24 24"
+          >
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" x2="16.65" y1="21" y2="16.65"></line>
+          </svg>
+          <input
+            className="w-full h-11 pl-10 pr-4 text-[14px] bg-[#EFEFF3]/70 hover:bg-[#EFEFF3] focus:bg-white text-slate-800 placeholder-slate-400 rounded-2xl border border-transparent focus:border-emerald-500/40 focus:ring-4 focus:ring-emerald-500/10 transition-all duration-200 outline-none"
+            placeholder="Cari kelas atau tingkatan..."
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+      </section>
+      {/* END: SearchSection */}
 
-      <div>
-        <h3 className="text-sm font-bold text-gray-700 mb-4 px-1">Pilih Kelas untuk Dinilai</h3>
-        
+      {/* BEGIN: ClassListSection */}
+      <section className="space-y-4 pt-1">
         {Object.keys(groupedAssignments).length === 0 ? (
-          <div className="text-center p-8 bg-white rounded-xl border border-dashed border-gray-300">
-            <p className="text-gray-500">Tidak ada kelas yang ditugaskan untuk periode aktif.</p>
+          <div className="text-center p-8 bg-white rounded-2xl border border-dashed border-slate-200 shadow-sm">
+            <p className="text-sm text-slate-400 font-medium">Tidak ada kelas yang ditugaskan untuk periode aktif.</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {Object.keys(groupedAssignments).map(levelName => (
-              <div key={levelName}>
-                <h4 className="text-xs font-bold text-gray-500 mb-2 uppercase px-1">{levelName}</h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {groupedAssignments[levelName].map((assignment) => (
-                    <button
-                      key={assignment.id}
-                      onClick={() => navigate(`/examiner/class/${assignment.class.id}?assignmentId=${assignment.id}`)}
-                      className="w-full text-left bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:border-primary active:scale-95 transition-all flex justify-between items-start group"
-                    >
-                      <div className="flex-1">
-                        <p className="font-bold text-gray-900 text-lg group-hover:text-primary transition-colors">Kelas {assignment.class.name}</p>
-                        <div className="flex items-center gap-2 mb-2">
-                           <p className="text-sm text-gray-500">{assignment.class.level?.name}</p>
-                           {stats[assignment.id] && (
-                             <>
-                               <span className="text-gray-300 text-xs">•</span>
-                               <p className="text-sm text-gray-500 font-medium">{stats[assignment.id].total} Santri</p>
-                             </>
-                           )}
-                        </div>
-                        
-                        {(assignment.room || assignment.ranting) && (
-                          <div className="mt-1.5 flex flex-wrap gap-1.5">
-                            {assignment.room && <span className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded-md">{assignment.room}</span>}
-                            {assignment.ranting && <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md">{assignment.ranting.code} - {(assignment.ranting as any).name}</span>}
+          <div className="space-y-5">
+            {Object.keys(groupedAssignments).map((levelName) => {
+              const levelAssignments = groupedAssignments[levelName];
+              return (
+                <div key={levelName} className="space-y-2.5">
+                  {/* Section Header */}
+                  <div className="flex items-baseline justify-between px-1">
+                    <div>
+                      <h3 className="text-[14px] font-bold tracking-tight text-slate-900">Pilih Kelas untuk Dinilai</h3>
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 block mt-0.5">
+                        Tingkatan {levelName}
+                      </span>
+                    </div>
+                    <span className="text-xs text-slate-400 font-medium">{levelAssignments.length} Kelas</span>
+                  </div>
+
+                  {/* Class Cards Container */}
+                  <div className="space-y-2.5">
+                    {levelAssignments.map((assignment) => (
+                      <article
+                        key={assignment.id}
+                        onClick={() => navigate(`/examiner/class/${assignment.class.id}?assignmentId=${assignment.id}`)}
+                        className="group bg-white rounded-2xl p-4 border border-slate-200/70 shadow-[0_2px_14px_-2px_rgba(0,0,0,0.03),0_1px_3px_0_rgba(0,0,0,0.02)] hover:shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition duration-200 ease-out flex items-center justify-between cursor-pointer"
+                      >
+                        <div className="space-y-2 flex-1 pr-3">
+                          <div>
+                            <h4 className="text-[16px] font-semibold text-slate-900 tracking-tight leading-snug group-hover:text-emerald-700 transition-colors">
+                              Kelas {assignment.class.name}
+                            </h4>
+                            <p className="text-[12.5px] font-normal text-slate-500 mt-0.5">
+                              {assignment.class.level?.name || levelName}{' '}
+                              <span className="text-slate-300 mx-1">•</span>{' '}
+                              {stats[assignment.id]?.total ?? 0} Santri
+                            </p>
                           </div>
-                        )}
-                      </div>
-                      <div className="text-right pl-3 mt-1">
-                        <span className="text-xs font-medium px-3 py-1.5 rounded-full text-primary bg-primary/10">
+                          {/* Badges */}
+                          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                            {assignment.room && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-slate-100 text-[11px] font-medium text-slate-600">
+                                {assignment.room}
+                              </span>
+                            )}
+                            {assignment.ranting && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-emerald-50 text-[11px] font-medium text-emerald-700 border border-emerald-100/60">
+                                {assignment.ranting.code} - {(assignment.ranting as any).name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {/* Action Button */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/examiner/class/${assignment.class.id}?assignmentId=${assignment.id}`);
+                          }}
+                          className="self-center px-4 py-1.5 rounded-full text-[13px] font-semibold text-emerald-700 bg-emerald-50 group-hover:bg-emerald-600 group-hover:text-white active:scale-95 transition-all duration-150 border border-emerald-200/50 group-hover:border-emerald-600 shadow-sm shrink-0"
+                        >
                           Buka
-                        </span>
-                      </div>
-                    </button>
-                  ))}
+                        </button>
+                      </article>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
-      </div>
+      </section>
+      {/* END: ClassListSection */}
     </div>
   );
 }

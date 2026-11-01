@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Loader2, Users, MapPin, Tag } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Plus, Trash2, Loader2, MapPin, Tag } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { Profile, ExamPeriod, Class, ExaminerAssignment } from '../../types';
@@ -7,6 +7,19 @@ import SearchableSelect from '../../components/SearchableSelect';
 
 interface RoomInfo {
   room: string;
+  rantings: { id: number; code: string; name: string }[];
+}
+
+interface GroupedAssignment {
+  key: string;
+  ids: number[];
+  period_id: number;
+  period?: ExamPeriod;
+  examiner_id: string;
+  examiner?: Profile;
+  class_id: number;
+  class?: Class;
+  room: string | null;
   rantings: { id: number; code: string; name: string }[];
 }
 
@@ -27,7 +40,7 @@ export default function AssignmentManagement() {
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingGroup, setEditingGroup] = useState<GroupedAssignment | null>(null);
   const [form, setForm] = useState({
     examiner_id: '',
     period_id: 0,
@@ -93,7 +106,7 @@ export default function AssignmentManagement() {
           .map(([room, rantingMap]) => ({ room, rantings: Array.from(rantingMap.values()) }));
 
         setAvailableRooms(rooms);
-        if (!editingId) {
+        if (!editingGroup) {
           setForm(f => ({ ...f, room: '' }));
           setSelectedRoomRantings([]);
         }
@@ -118,7 +131,35 @@ export default function AssignmentManagement() {
     fetchData();
   }, []);
 
-
+  // Kelompokkan penugasan agar 1 penguji di 1 ruangan hanya tampil 1 baris simpel
+  const groupedAssignments: GroupedAssignment[] = useMemo(() => {
+    const map = new Map<string, GroupedAssignment>();
+    assignments.forEach(a => {
+      const key = `${a.period_id}_${a.examiner_id}_${a.class_id}_${a.room || ''}`;
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          ids: [a.id],
+          period_id: a.period_id,
+          period: a.period,
+          examiner_id: a.examiner_id,
+          examiner: examiners.find(e => e.id === a.examiner_id),
+          class_id: a.class_id,
+          class: a.class,
+          room: a.room || null,
+          rantings: a.ranting ? [{ id: a.ranting.id, code: a.ranting.code, name: (a.ranting as any).name }] : [],
+        });
+      } else {
+        const item = map.get(key)!;
+        if (!item.ids.includes(a.id)) item.ids.push(a.id);
+        const ranting = a.ranting;
+        if (ranting && !item.rantings.some(r => r.id === ranting.id)) {
+          item.rantings.push({ id: ranting.id, code: ranting.code, name: (ranting as any).name });
+        }
+      }
+    });
+    return Array.from(map.values());
+  }, [assignments, examiners]);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,14 +170,14 @@ export default function AssignmentManagement() {
 
     setIsSaving(true);
     try {
-      if (editingId) {
-        // Mode Edit: Hanya update penguji dan periode
+      if (editingGroup) {
+        // Mode Edit: Update penguji dan periode untuk seluruh id penugasan dalam grup ini
         const { error } = await supabase.from('examiner_assignments')
           .update({
             examiner_id: form.examiner_id,
             period_id: form.period_id,
           })
-          .eq('id', editingId);
+          .in('id', editingGroup.ids);
         
         if (error) throw error;
         toast.success('Penugasan berhasil diperbarui');
@@ -182,16 +223,18 @@ export default function AssignmentManagement() {
 
   const resetModal = () => {
     setShowModal(false);
-    setEditingId(null);
+    setEditingGroup(null);
     setForm(f => ({ ...f, examiner_id: '', class_id: 0, room: '' }));
     setAvailableRooms([]);
     setSelectedRoomRantings([]);
   };
 
-  const handleDelete = async (id: number) => {
-    if (!window.confirm('Yakin ingin menghapus penugasan ini?')) return;
+  const handleDeleteGroup = async (g: GroupedAssignment) => {
+    const examinerName = g.examiner?.full_name || 'Penguji';
+    const roomText = g.room ? ` di ${g.room}` : '';
+    if (!window.confirm(`Yakin ingin menghapus penugasan ${examinerName}${roomText}?`)) return;
     try {
-      const { error } = await supabase.from('examiner_assignments').delete().eq('id', id);
+      const { error } = await supabase.from('examiner_assignments').delete().in('id', g.ids);
       if (error) throw error;
       toast.success('Penugasan dihapus');
       fetchData();
@@ -220,18 +263,15 @@ export default function AssignmentManagement() {
     }
   };
 
-  const handleEdit = (a: any) => {
-    setEditingId(a.id);
+  const handleEdit = (g: GroupedAssignment) => {
+    setEditingGroup(g);
     setForm({
-      examiner_id: a.examiner_id,
-      period_id: a.period_id,
-      class_id: a.class_id,
-      room: a.room || '',
+      examiner_id: g.examiner_id,
+      period_id: g.period_id,
+      class_id: g.class_id,
+      room: g.room || '',
     });
-    // Set selected room rantings for display if needed
-    if (a.room) {
-      handleRoomChange(a.room); // Might not accurately fetch all for that class immediately if not loaded, but it's ok for edit view since we disable them.
-    }
+    setSelectedRoomRantings(g.rantings);
     setShowModal(true);
   };
 
@@ -245,9 +285,9 @@ export default function AssignmentManagement() {
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <button
             onClick={() => setShowDeleteAllModal(true)}
-            disabled={assignments.length === 0}
+            disabled={groupedAssignments.length === 0}
             className="flex items-center gap-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 px-4 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title={assignments.length === 0 ? 'Belum ada data penugasan untuk dihapus' : 'Hapus semua plotting penguji'}
+            title={groupedAssignments.length === 0 ? 'Belum ada data penugasan untuk dihapus' : 'Hapus semua plotting penguji'}
           >
             <Trash2 size={18} />
             Hapus Semua
@@ -279,59 +319,79 @@ export default function AssignmentManagement() {
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr><td colSpan={6} className="p-8 text-center text-gray-400">Memuat data...</td></tr>
-              ) : assignments.length === 0 ? (
+              ) : groupedAssignments.length === 0 ? (
                 <tr><td colSpan={6} className="p-8 text-center text-gray-400">Belum ada data penugasan</td></tr>
-              ) : assignments.map(a => {
-                const examiner = examiners.find(e => e.id === a.examiner_id);
-                return (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="p-4 text-gray-800">{a.period?.name}</td>
-                    <td className="p-4 font-medium text-gray-900">
-                      <div className="flex items-center gap-2">
-                        <Users size={16} className="text-gray-400" />
-                        {examiner?.full_name || 'Tidak ditemukan'}
+              ) : groupedAssignments.map(g => (
+                <tr key={g.key} className="hover:bg-gray-50/80 transition-colors">
+                  <td className="p-4 text-gray-800 font-medium">{g.period?.name || '-'}</td>
+                  <td className="p-4 font-semibold text-gray-900">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-xs shrink-0">
+                        {(g.examiner?.full_name || 'P').charAt(0).toUpperCase()}
                       </div>
-                    </td>
-                    <td className="p-4 text-gray-800">{a.class?.name}</td>
-                    <td className="p-4 text-gray-800">
-                      {a.room ? (
-                        <div className="flex items-center gap-1 text-emerald-700">
-                          <MapPin size={14} />
-                          {a.room}
-                        </div>
-                      ) : <span className="text-gray-400 italic">-</span>}
-                    </td>
-                    <td className="p-4 text-gray-800">
-                      {a.ranting ? (
-                        <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                          <Tag size={11} />
-                          {a.ranting.code} - {(a.ranting as any).name}
+                      <span className="text-sm font-semibold text-gray-900">{g.examiner?.full_name || 'Tidak ditemukan'}</span>
+                    </div>
+                  </td>
+                  <td className="p-4 text-gray-800">
+                    <span className="font-semibold text-gray-900">{g.class?.name}</span>
+                    {g.class?.level?.name && (
+                      <span className="text-xs text-gray-400 ml-1 font-normal">({g.class.level.name})</span>
+                    )}
+                  </td>
+                  <td className="p-4 text-gray-800">
+                    {g.room ? (
+                      <div className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-blue-200/50">
+                        <MapPin size={13} className="text-blue-500" />
+                        {g.room}
+                      </div>
+                    ) : <span className="text-gray-400 italic text-sm">Semua Ruangan</span>}
+                  </td>
+                  <td className="p-4 text-gray-800">
+                    {g.rantings.length === 0 ? (
+                      <span className="text-gray-400 italic text-sm">Semua Ranting</span>
+                    ) : g.rantings.length === 1 ? (
+                      <span
+                        title={`${g.rantings[0].code} - ${g.rantings[0].name}`}
+                        className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-medium border border-emerald-200/60"
+                      >
+                        <Tag size={12} className="text-emerald-600" />
+                        <span className="font-bold">{g.rantings[0].code}</span> — {g.rantings[0].name}
+                      </span>
+                    ) : (
+                      <div
+                        className="inline-flex items-center gap-2 cursor-help"
+                        title={g.rantings.map(r => `${r.code} - ${r.name}`).join('\n')}
+                      >
+                        <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-emerald-200/60">
+                          <Tag size={12} className="text-emerald-600" />
+                          {g.rantings.length} Ranting
                         </span>
-                      ) : (
-                        <span className="text-gray-400 italic text-sm">Semua Ranting</span>
-                      )}
-                    </td>
-                    <td className="p-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(a)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit Penguji"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
-                        </button>
-                        <button
-                          onClick={() => handleDelete(a.id)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Hapus Penugasan"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        <span className="text-xs text-gray-500 font-medium">
+                          ({g.rantings.map(r => r.code).join(', ')})
+                        </span>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                    )}
+                  </td>
+                  <td className="p-4 text-right">
+                    <div className="flex justify-end gap-1">
+                      <button
+                        onClick={() => handleEdit(g)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                        title="Edit Penugasan"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteGroup(g)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Hapus Penugasan"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -342,8 +402,8 @@ export default function AssignmentManagement() {
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-6 border-b border-gray-200">
-              <h3 className="text-xl font-bold text-gray-900">{editingId ? 'Edit Penguji' : 'Penugasan Penguji'}</h3>
-              <p className="text-sm text-gray-500 mt-1">{editingId ? 'Ubah penguji untuk kelas dan ruangan ini.' : 'Pilih kelas lalu pilih ruangan — ranting otomatis terisi.'}</p>
+              <h3 className="text-xl font-bold text-gray-900">{editingGroup ? 'Edit Penguji' : 'Penugasan Penguji'}</h3>
+              <p className="text-sm text-gray-500 mt-1">{editingGroup ? 'Ubah penguji untuk kelas dan ruangan ini.' : 'Pilih kelas lalu pilih ruangan — ranting otomatis terisi.'}</p>
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-4 overflow-y-auto">
               
@@ -374,8 +434,8 @@ export default function AssignmentManagement() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Kelas</label>
                 <select
                   required
-                  disabled={editingId !== null}
-                  className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none ${editingId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                  disabled={editingGroup !== null}
+                  className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none ${editingGroup ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                   value={form.class_id}
                   onChange={e => setForm(f => ({ ...f, class_id: Number(e.target.value), room: '' }))}
                 >
@@ -391,19 +451,19 @@ export default function AssignmentManagement() {
                     Ruangan / Halaqoh
                     {loadingRooms && <span className="ml-2 text-xs text-gray-400">Memuat ruangan...</span>}
                   </label>
-                  {!loadingRooms && availableRooms.length === 0 && !editingId ? (
+                  {!loadingRooms && availableRooms.length === 0 && !editingGroup ? (
                     <div className="text-sm text-amber-600 bg-amber-50 p-3 rounded-lg border border-amber-200">
                       Tidak ada data ruangan/halaqoh yang terisi untuk santri di kelas ini.
                     </div>
                   ) : (
                     <select
-                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none ${editingId ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
+                      className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary outline-none ${editingGroup ? 'bg-gray-100 text-gray-500 cursor-not-allowed' : ''}`}
                       value={form.room}
-                      disabled={editingId !== null}
+                      disabled={editingGroup !== null}
                       onChange={e => handleRoomChange(e.target.value)}
                     >
                       <option value="">-- Semua Ruangan --</option>
-                      {editingId && !availableRooms.find(r => r.room === form.room) && form.room && (
+                      {editingGroup && !availableRooms.find(r => r.room === form.room) && form.room && (
                         <option value={form.room}>{form.room}</option>
                       )}
                       {availableRooms.map(r => (
@@ -411,7 +471,7 @@ export default function AssignmentManagement() {
                       ))}
                     </select>
                   )}
-                  {editingId && <p className="text-xs text-blue-600 mt-2">Peringatan: Kelas dan Ruangan tidak dapat diubah saat Edit. Hapus penugasan ini dan buat baru jika ingin mengubah kelas/ruangan.</p>}
+                  {editingGroup && <p className="text-xs text-blue-600 mt-2">Peringatan: Kelas dan Ruangan tidak dapat diubah saat Edit. Hapus penugasan ini dan buat baru jika ingin mengubah kelas/ruangan.</p>}
                 </div>
               )}
 
@@ -470,7 +530,7 @@ export default function AssignmentManagement() {
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">Hapus Semua Plotting?</h3>
               <p className="text-gray-500 mb-6">
-                Anda yakin ingin menghapus <strong>seluruh data penugasan/plotting penguji</strong> ({assignments.length} penugasan)? Tindakan ini tidak dapat dibatalkan.
+                Anda yakin ingin menghapus <strong>seluruh data penugasan/plotting penguji</strong> ({groupedAssignments.length} penugasan)? Tindakan ini tidak dapat dibatalkan.
               </p>
               
               <div className="flex gap-3">
