@@ -30,102 +30,140 @@ export default function AdminLayout() {
     return location.pathname.startsWith(path);
   };
 
-  // Bottom nav: show max 5 items on mobile
-  const bottomNavItems = navItems.slice(0, 5);
+  // Mobile bottom nav items: 4 primary shortcuts + 1 "Lainnya" button to open drawer
+  const bottomPrimaryItems = [
+    { to: '/admin', icon: LayoutDashboard, label: 'Dashboard', exact: true },
+    { to: '/admin/students', icon: Users, label: 'Santri' },
+    { to: '/admin/classes', icon: BookOpen, label: 'Kelas' },
+    { to: '/admin/reports', icon: FileText, label: 'Laporan' },
+  ];
 
   return (
-    <div className="flex h-screen w-full bg-gray-50 text-left">
+    <div className="flex h-screen w-full bg-[#F8F9FB] text-left">
       {/* Sidebar Desktop */}
-      <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col">
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-gradient-to-tr from-emerald-500 to-cyan-500 rounded-xl flex items-center justify-center">
-              <BookOpen size={18} className="text-white" />
+      <aside className="w-72 bg-white border-r border-[#EEF0F2] hidden md:flex flex-col justify-between shrink-0">
+        <div className="flex flex-col h-full">
+          {/* Logo / Header */}
+          <div className="px-6 pt-6 pb-5 flex items-center gap-3.5 border-b border-[#F4F5F7]">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-sm shadow-brand-500/20">
+              <BookOpen size={20} className="text-white" />
             </div>
             <div>
-              <h1 className="text-lg font-bold text-gray-900 tracking-tight">MIQ Admin</h1>
-              <p className="text-xs text-gray-400">Smart Assessment</p>
+              <h1 className="font-bold text-[17px] tracking-tight text-slate-900 leading-tight">MIQ Admin</h1>
+              <p className="text-[12px] text-slate-400 font-medium">Smart Assessment</p>
             </div>
           </div>
-        </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const active = isActive(item.to, item.exact);
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl font-medium transition-all ${
-                  active
-                    ? 'bg-emerald-50 text-emerald-700'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`}
-              >
-                <item.icon size={20} className={active ? 'text-emerald-600' : ''} />
-                {item.label}
-                {active && <ChevronRight size={14} className="ml-auto text-emerald-400" />}
-              </Link>
-            );
-          })}
-        </nav>
-        <div className="p-3 border-t border-gray-100">
-          {profile && (
-            <div className="px-3 py-2 mb-2">
-              <p className="text-sm font-semibold text-gray-900 truncate">{profile.full_name}</p>
-              <p className="text-xs text-gray-400 truncate">{profile.email}</p>
-            </div>
-          )}
-          <button
-            onClick={() => signOut()}
-            className="flex w-full items-center gap-3 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 font-medium transition-colors"
-          >
-            <LogOut size={20} />
-            Keluar
-          </button>
+
+          {/* Navigation Items */}
+          <nav className="flex-1 px-3.5 py-4 space-y-1 overflow-y-auto">
+            {navItems.map((item) => {
+              const active = isActive(item.to, item.exact);
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={`group flex items-center justify-between px-3.5 py-2.5 rounded-xl font-medium text-[14px] transition-all ${
+                    active
+                      ? 'bg-brand-50 text-brand-700 font-semibold shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <item.icon
+                      size={18}
+                      className={`transition-colors ${active ? 'text-brand-600' : 'text-slate-400 group-hover:text-slate-600'}`}
+                    />
+                    <span>{item.label}</span>
+                  </div>
+                  {active && (
+                    <ChevronRight size={15} className="text-brand-500 opacity-80" />
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+
+          {/* Sidebar Bottom User Info & Logout */}
+          <div className="p-4 border-t border-[#EEF0F2]">
+            {profile && (
+              <div className="px-3 py-2 mb-2 rounded-xl bg-slate-50/70 border border-slate-100">
+                <div className="text-[13.5px] font-semibold text-slate-800 leading-snug truncate">
+                  {profile.full_name || 'Admin MIQ'}
+                </div>
+                <div className="text-[11.5px] text-slate-400 truncate font-normal">
+                  {profile.email || 'admin@miq.id'}
+                </div>
+              </div>
+            )}
+            <button
+              onClick={() => signOut()}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-red-600 hover:bg-red-50/80 transition-colors text-[13.5px] font-medium"
+              type="button"
+            >
+              <LogOut size={16} />
+              <span>Keluar</span>
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* Main Content */}
+      {/* Main Content Area */}
       <main className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Mobile Header */}
-        <header className="md:hidden bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+        {/* Mobile Header (Apple Frosted Glass) */}
+        <header className="md:hidden bg-white/90 backdrop-blur-md border-b border-slate-200/60 px-4 py-3 flex items-center justify-between sticky top-0 z-30 safe-top">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-tr from-emerald-500 to-cyan-500 rounded-lg flex items-center justify-center">
-              <BookOpen size={16} className="text-white" />
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-xs">
+              <BookOpen size={16} />
             </div>
-            <h1 className="text-lg font-bold text-gray-900">MIQ Admin</h1>
+            <div>
+              <h1 className="text-[16px] font-bold text-slate-900 leading-tight">MIQ Admin</h1>
+              <p className="text-[10.5px] text-slate-400 font-medium">Smart Assessment</p>
+            </div>
           </div>
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <Menu size={22} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="p-2 text-slate-600 hover:bg-slate-100 active:scale-95 rounded-xl transition-all"
+              aria-label="Buka Menu"
+            >
+              <Menu size={22} />
+            </button>
+          </div>
         </header>
 
-        {/* Mobile Slide-out Menu */}
+        {/* Mobile Slide-out Menu (Drawer) */}
         {mobileMenuOpen && (
           <div className="md:hidden fixed inset-0 z-50 flex">
             {/* Backdrop */}
             <div
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+              className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
               onClick={() => setMobileMenuOpen(false)}
             />
             {/* Panel */}
-            <div className="relative ml-auto w-72 bg-white h-full shadow-2xl flex flex-col animate-slide-in-right">
-              <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-gray-900">{profile?.full_name || 'Admin'}</p>
-                  <p className="text-xs text-gray-400">{profile?.email || ''}</p>
+            <div className="relative ml-auto w-80 max-w-[85vw] bg-white h-full shadow-2xl flex flex-col">
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between safe-top">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 to-emerald-400 flex items-center justify-center text-white shadow-xs">
+                    <BookOpen size={18} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-[15px] text-slate-900">{profile?.full_name || 'Admin MIQ'}</p>
+                    <p className="text-xs text-slate-400 truncate max-w-[170px]">{profile?.email || ''}</p>
+                  </div>
                 </div>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 text-gray-400 hover:bg-gray-100 rounded-lg"
+                  className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                  aria-label="Tutup"
                 >
                   <X size={20} />
                 </button>
               </div>
+
               <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+                <div className="px-3 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Menu Utama
+                </div>
                 {navItems.map((item) => {
                   const active = isActive(item.to, item.exact);
                   return (
@@ -133,56 +171,77 @@ export default function AdminLayout() {
                       key={item.to}
                       to={item.to}
                       onClick={() => setMobileMenuOpen(false)}
-                      className={`flex items-center gap-3 px-3 py-3 rounded-xl font-medium transition-all ${
+                      className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-[14px] font-medium transition-all ${
                         active
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'text-gray-600 hover:bg-gray-50'
+                          ? 'bg-brand-50 text-brand-700 font-semibold'
+                          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
-                      <item.icon size={20} className={active ? 'text-emerald-600' : ''} />
-                      {item.label}
+                      <div className="flex items-center gap-3">
+                        <item.icon size={18} className={active ? 'text-brand-600' : 'text-slate-400'} />
+                        <span>{item.label}</span>
+                      </div>
+                      {active && <ChevronRight size={14} className="text-brand-500" />}
                     </Link>
                   );
                 })}
               </nav>
-              <div className="p-3 border-t border-gray-100">
+
+              <div className="p-4 border-t border-slate-100 safe-bottom">
                 <button
                   onClick={() => { signOut(); setMobileMenuOpen(false); }}
-                  className="flex w-full items-center gap-3 px-3 py-3 rounded-xl text-red-500 hover:bg-red-50 font-medium transition-colors"
+                  className="flex w-full items-center justify-center gap-2.5 px-3 py-2.5 rounded-xl text-red-600 bg-red-50 hover:bg-red-100 font-medium text-sm transition-colors"
                 >
-                  <LogOut size={20} />
-                  Keluar
+                  <LogOut size={16} />
+                  <span>Keluar Akun</span>
                 </button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Page Content */}
-        <div className="flex-1 overflow-auto p-4 md:p-8 pb-20 md:pb-8">
+        {/* Page Content Viewport */}
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 md:p-8 lg:p-9 pb-24 md:pb-8">
           <Outlet />
         </div>
 
-        {/* Mobile Bottom Navigation */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-30 safe-area-bottom">
-          {bottomNavItems.map((item) => {
+        {/* Mobile Bottom Navigation (iOS Apple TabBar Style) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur-lg border-t border-slate-200/70 flex z-30 safe-bottom shadow-lg">
+          {bottomPrimaryItems.map((item) => {
             const active = isActive(item.to, item.exact);
             return (
               <Link
                 key={item.to}
                 to={item.to}
-                className={`flex-1 flex flex-col items-center justify-center py-2 pt-2.5 transition-colors ${
-                  active ? 'text-emerald-600' : 'text-gray-400'
+                className={`flex-1 flex flex-col items-center justify-center py-2 transition-colors ${
+                  active ? 'text-brand-600' : 'text-slate-400 hover:text-slate-600'
                 }`}
               >
-                <item.icon size={20} className={active ? 'text-emerald-600' : 'text-gray-400'} />
-                <span className={`text-[10px] mt-0.5 font-medium ${active ? 'text-emerald-600' : 'text-gray-400'}`}>
+                <div className="relative">
+                  <item.icon size={20} className={active ? 'text-brand-600 stroke-[2.2]' : 'text-slate-400'} />
+                  {active && (
+                    <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-brand-600" />
+                  )}
+                </div>
+                <span className={`text-[10px] mt-1 font-medium ${active ? 'text-brand-700 font-semibold' : 'text-slate-500'}`}>
                   {item.label}
                 </span>
-                {active && <div className="w-5 h-0.5 bg-emerald-500 rounded-full mt-0.5" />}
               </Link>
             );
           })}
+          {/* 5th slot: Menu Drawer Trigger */}
+          <button
+            onClick={() => setMobileMenuOpen(true)}
+            className="flex-1 flex flex-col items-center justify-center py-2 text-slate-400 hover:text-slate-600 transition-colors"
+            type="button"
+          >
+            <div className="relative">
+              <Menu size={20} className="text-slate-400" />
+            </div>
+            <span className="text-[10px] mt-1 font-medium text-slate-500">
+              Lainnya
+            </span>
+          </button>
         </nav>
       </main>
     </div>
